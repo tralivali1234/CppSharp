@@ -16,7 +16,7 @@ Check out the Getting started guide for build instructions.
 
 The driver is responsible for setting up the needed context for the rest of
 the tool and for implementing the main logic for parsing the user-provided headers,
-processing the declarations adn then calling the language-specific generator to
+processing the declarations and then calling the language-specific generator to
 generate the bindings.
 
 
@@ -29,7 +29,7 @@ by the generator.
 
 This is done in Parser.cpp, we walk the AST provided by Clang and mirror
 it in a .NET-friendly way. Most of this code is pretty straightforward if
-you are familiar how Clang represents C++ code in AST nodes.
+you are familiar with how Clang represents C++ code in AST nodes.
 
 Recommended Clang documentation: [http://clang.llvm.org/docs/InternalsManual.html](http://clang.llvm.org/docs/InternalsManual.html "Clang Internals")
 

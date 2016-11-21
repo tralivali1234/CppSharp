@@ -1,22 +1,26 @@
 ﻿using System;
 using System.Linq;
 using CppSharp.AST;
+using CppSharp.AST.Extensions;
 
 namespace CppSharp.Passes
 {
     /// <summary>
     /// Checks for ambiguous functions/method declarations.
+    ///
     /// Example:
-    /// 
     /// struct S
     /// {
     ///     void Foo(int a, int b = 0);
     ///     void Foo(int a);
-    /// 
     ///     void Bar();
     ///     void Bar() const;
-    /// };
     /// 
+    ///     void Qux(int&amp; i);
+    ///     void Qux(int&amp;&amp; i);
+    ///     void Qux(const int&amp; i);
+    /// };
+    ///
     /// When we call Foo(0) the compiler will not know which call we want and
     /// will error out so we need to detect this and either ignore the methods
     /// or flag them such that the generator can explicitly disambiguate when
@@ -46,7 +50,8 @@ namespace CppSharp.Passes
                 if (!overload.IsGenerated) continue;
 
                 if (CheckConstnessForAmbiguity(function, overload) ||
-                    CheckDefaultParametersForAmbiguity(function, overload))
+                    CheckDefaultParametersForAmbiguity(function, overload) ||
+                    CheckSingleParameterPointerConstnessForAmbiguity(function, overload))
                 {
                     function.IsAmbiguous = true;
                     overload.IsAmbiguous = true;
@@ -54,7 +59,7 @@ namespace CppSharp.Passes
             }
 
             if (function.IsAmbiguous)
-                Driver.Diagnostics.Debug("Found ambiguous overload: {0}",
+                Diagnostics.Debug("Found ambiguous overload: {0}",
                     function.QualifiedOriginalName);
 
             return true;
@@ -116,6 +121,66 @@ namespace CppSharp.Passes
                     method2.ExplicitlyIgnore();
                     return true;
                 }
+            }
+
+            return false;
+        }
+
+        private static bool CheckSingleParameterPointerConstnessForAmbiguity(
+            Function function, Function overload)
+        {
+            var functionParams = function.Parameters.Where(
+                p => p.Kind == ParameterKind.Regular).ToList();
+            // It's difficult to handle this case for more than one parameter
+            // For example, if we have:
+            //     void f(float&, const int&);
+            //     void f(const float&, int&);
+            // what should we do? Generate both? Generate the first one encountered?
+            // Generate the one with the least amount of "complex" parameters?
+            // So let's just start with the simplest case for the time being
+            if (functionParams.Count != 1)
+                return false;
+            var overloadParams = overload.Parameters.Where(
+                p => p.Kind == ParameterKind.Regular).ToList();
+            if (overloadParams.Count != 1)
+                return false;
+
+            var parameterFunction = functionParams[0];
+            var parameterOverload = overloadParams[0];
+
+            var pointerParamFunction = parameterFunction.Type.Desugar() as PointerType;
+            var pointerParamOverload = parameterOverload.Type.Desugar() as PointerType;
+
+            if (pointerParamFunction == null || pointerParamOverload == null)
+                return false;
+
+            if (!pointerParamFunction.GetPointee().Equals(pointerParamOverload.GetPointee()))
+                return false;
+
+            if (parameterFunction.IsConst && !parameterOverload.IsConst)
+            {
+                function.ExplicitlyIgnore();
+                return true;
+            }
+
+            if (parameterOverload.IsConst && !parameterFunction.IsConst)
+            {
+                overload.ExplicitlyIgnore();
+                return true;
+            }
+
+            if (pointerParamFunction.Modifier == PointerType.TypeModifier.RVReference &&
+                pointerParamOverload.Modifier != PointerType.TypeModifier.RVReference)
+            {
+                function.ExplicitlyIgnore();
+                return true;
+            }
+
+            if (pointerParamFunction.Modifier != PointerType.TypeModifier.RVReference &&
+                pointerParamOverload.Modifier == PointerType.TypeModifier.RVReference)
+            {
+                overload.ExplicitlyIgnore();
+                return true;
             }
 
             return false;

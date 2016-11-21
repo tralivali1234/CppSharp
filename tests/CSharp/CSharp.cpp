@@ -1,6 +1,6 @@
 #include "CSharp.h"
 
-Foo::Foo()
+Foo::Foo(const char* name)
 {
     A = 10;
     P = 50;
@@ -38,6 +38,23 @@ bool Foo::isNoParams()
 }
 
 void Foo::setNoParams()
+{
+}
+
+void Foo::foo(int i)
+{
+}
+
+void Foo::takesStdVector(const std::vector<int>& vector)
+{
+}
+
+int Foo::width()
+{
+    return 1;
+}
+
+void Foo::set_width(int value)
 {
 }
 
@@ -143,6 +160,10 @@ Bar::Bar(Qux qux)
 {
 }
 
+Bar::Bar(Items item)
+{
+}
+
 int Bar::method()
 {
     return 2;
@@ -239,6 +260,32 @@ void Proprietor::setValue(int value)
 long Proprietor::prop()
 {
     return m_property;
+}
+
+const Baz& Proprietor::covariant()
+{
+    static Baz baz;
+    return baz;
+}
+
+Bar::Items Proprietor::items() const
+{
+    return _items;
+}
+
+void Proprietor::setItems(const Bar::Items& value)
+{
+    _items = value;
+}
+
+Bar::Items Proprietor::itemsByValue() const
+{
+    return _itemsByValue;
+}
+
+void Proprietor::setItemsByValue(Bar::Items value)
+{
+    _itemsByValue = value;
 }
 
 void P::setValue(int value)
@@ -342,6 +389,46 @@ TestCopyConstructorVal::TestCopyConstructorVal(const TestCopyConstructorVal& oth
     B = other.B;
 }
 
+TestRenaming::TestRenaming()
+{
+}
+
+TestRenaming::~TestRenaming()
+{
+}
+
+void TestRenaming::name()
+{
+}
+
+void TestRenaming::Name()
+{
+}
+
+int TestRenaming::property()
+{
+    return 1;
+}
+
+UsesPointerToEnumInParamOfVirtual::UsesPointerToEnumInParamOfVirtual()
+{
+}
+
+UsesPointerToEnumInParamOfVirtual::~UsesPointerToEnumInParamOfVirtual()
+{
+}
+
+QFlags<Flags> UsesPointerToEnumInParamOfVirtual::hasPointerToEnumInParam(const QFlags<Flags>& pointerToEnum) const
+{
+    return pointerToEnum;
+}
+
+QFlags<Flags> UsesPointerToEnumInParamOfVirtual::callOverrideOfHasPointerToEnumInParam(
+        const UsesPointerToEnumInParamOfVirtual* object, const QFlags<Flags>& pointerToEnum)
+{
+    return object->hasPointerToEnumInParam(pointerToEnum);
+}
+
 Flags operator|(Flags lhs, Flags rhs)
 {
     return static_cast<Flags>(static_cast<int>(lhs) | static_cast<int>(rhs));
@@ -373,6 +460,9 @@ MethodsWithDefaultValues::QMargins::QMargins(int left, int top, int right, int b
 {
 }
 
+const char* MethodsWithDefaultValues::stringConstant = "test";
+int MethodsWithDefaultValues::intConstant = 5;
+
 MethodsWithDefaultValues::MethodsWithDefaultValues(Foo foo)
 {
     m_foo = foo;
@@ -384,6 +474,10 @@ MethodsWithDefaultValues::MethodsWithDefaultValues(int a)
 }
 
 MethodsWithDefaultValues::MethodsWithDefaultValues(double d, QList<QColor> list)
+{
+}
+
+MethodsWithDefaultValues::MethodsWithDefaultValues(QRect* pointer, float f, int i)
 {
 }
 
@@ -443,8 +537,13 @@ void MethodsWithDefaultValues::defaultNonEmptyCtor(QGenericArgument arg)
 {
 }
 
-void MethodsWithDefaultValues::defaultMappedToEnum(QFlags<Flags> qFlags)
+void MethodsWithDefaultValues::defaultNonEmptyCtorWithNullPtr(QGenericArgument arg)
 {
+}
+
+QFlags<Flags> MethodsWithDefaultValues::defaultMappedToEnum(const QFlags<Flags>& qFlags)
+{
+    return qFlags;
 }
 
 void MethodsWithDefaultValues::defaultMappedToZeroEnum(QFlags<Flags> qFlags)
@@ -468,6 +567,10 @@ void MethodsWithDefaultValues::defaultImplicitCtorFoo(Quux arg)
 }
 
 void MethodsWithDefaultValues::defaultImplicitCtorEnum(Baz arg)
+{
+}
+
+void MethodsWithDefaultValues::defaultImplicitCtorEnumTwo(Bar arg)
 {
 }
 
@@ -519,6 +622,35 @@ void MethodsWithDefaultValues::defaultWithGetPropertyCall(int f)
 {
 }
 
+void MethodsWithDefaultValues::defaultWithIndirectStringConstant(const Foo& arg)
+{
+}
+
+void MethodsWithDefaultValues::defaultWithDirectIntConstant(int arg)
+{
+}
+
+void MethodsWithDefaultValues::defaultWithEnumInLowerCasedNameSpace(lowerCaseNameSpace::Enum e)
+{
+}
+
+void MethodsWithDefaultValues::defaultWithCharFromInt(char c)
+{
+}
+
+void MethodsWithDefaultValues::defaultWithFreeConstantInNameSpace(int c)
+{
+}
+
+void MethodsWithDefaultValues::defaultWithStdNumericLimits(double d, int i)
+{
+}
+
+int MethodsWithDefaultValues::DefaultWithParamNamedSameAsMethod(int DefaultWithParamNamedSameAsMethod, const Foo& defaultArg)
+{
+    return 1;
+}
+
 int MethodsWithDefaultValues::getA()
 {
     return m_foo.A;
@@ -545,6 +677,14 @@ void HasOverridesWithChangedAccess::privateOverride(int i)
 }
 
 void HasOverridesWithChangedAccess::publicOverride()
+{
+}
+
+HasOverridesWithIncreasedAccess::HasOverridesWithIncreasedAccess()
+{
+}
+
+void HasOverridesWithIncreasedAccess::privateOverride(int i)
 {
 }
 
@@ -899,14 +1039,39 @@ void QObject::event()
 {
 }
 
+QPaintDevice::QPaintDevice() : test(0)
+{
+}
+
+QPaintDevice::~QPaintDevice()
+{
+}
+
+void QPaintDevice::changeVTableLayout()
+{
+}
+
 QWidget::QWidget()
 {
     QApplication::instance->notify(this);
 }
 
+QWidget::~QWidget()
+{
+}
+
 void QWidget::event()
 {
     QApplication::instance->notify(&child);
+}
+
+QPainter::QPainter(QPaintDevice& paintDevice)
+{
+    paintDevice.test = 5;
+}
+
+QPainter::~QPainter()
+{
 }
 
 QApplication::QApplication()
@@ -956,3 +1121,144 @@ VirtualDtorAddedInDerived::~VirtualDtorAddedInDerived()
 }
 
 bool VirtualDtorAddedInDerived::dtorCalled = false;
+
+void NamespaceB::B::Function(CS_OUT NamespaceA::A &a)
+{
+}
+
+HasVirtualTakesReturnsProblematicTypes::HasVirtualTakesReturnsProblematicTypes()
+{
+}
+
+HasVirtualTakesReturnsProblematicTypes::~HasVirtualTakesReturnsProblematicTypes()
+{
+}
+
+const char* HasVirtualTakesReturnsProblematicTypes::virtualTakesAndReturnsString(const char* c)
+{
+    return c;
+}
+
+const char* HasVirtualTakesReturnsProblematicTypes::callsVirtualToReturnString(const char* c)
+{
+    return virtualTakesAndReturnsString(c);
+}
+
+bool HasVirtualTakesReturnsProblematicTypes::virtualTakesAndReturnsBool(bool b)
+{
+    return b;
+}
+
+bool HasVirtualTakesReturnsProblematicTypes::callsVirtualToReturnBool(bool b)
+{
+    return virtualTakesAndReturnsBool(b);
+}
+
+extern const unsigned char variableWithFixedPrimitiveArray[2] = { 5, 10 };
+extern const unsigned int variableWithVariablePrimitiveArray[] = { 15, 20 };
+
+TestString::TestString() : unicodeConst(L"ქართული ენა"), unicode(0)
+{
+}
+
+TestString::~TestString()
+{
+}
+
+PrimaryBaseWithAbstractWithDefaultArg::PrimaryBaseWithAbstractWithDefaultArg()
+{
+}
+
+PrimaryBaseWithAbstractWithDefaultArg::~PrimaryBaseWithAbstractWithDefaultArg()
+{
+}
+
+SecondaryBaseWithAbstractWithDefaultArg::SecondaryBaseWithAbstractWithDefaultArg()
+{
+}
+
+SecondaryBaseWithAbstractWithDefaultArg::~SecondaryBaseWithAbstractWithDefaultArg()
+{
+}
+
+HasSecondaryBaseWithAbstractWithDefaultArg::HasSecondaryBaseWithAbstractWithDefaultArg()
+{
+}
+
+HasSecondaryBaseWithAbstractWithDefaultArg::~HasSecondaryBaseWithAbstractWithDefaultArg()
+{
+}
+
+void HasSecondaryBaseWithAbstractWithDefaultArg::abstract(const Foo& foo)
+{
+}
+
+void HasSecondaryBaseWithAbstractWithDefaultArg::abstractWithNoDefaultArg(const Foo& foo)
+{
+}
+
+MissingObjectOnVirtualCallSecondaryBase::MissingObjectOnVirtualCallSecondaryBase()
+{
+}
+
+void MissingObjectOnVirtualCallSecondaryBase::f()
+{
+}
+
+MissingObjectOnVirtualCall::MissingObjectOnVirtualCall()
+{
+}
+
+void MissingObjectOnVirtualCall::f()
+{
+}
+
+HasMissingObjectOnVirtualCall::HasMissingObjectOnVirtualCall()
+{
+}
+
+void HasMissingObjectOnVirtualCall::makeMissingObjectOnVirtualCall()
+{
+    stackOverflowOnVirtualCall->f();
+}
+
+void HasMissingObjectOnVirtualCall::setMissingObjectOnVirtualCall(MissingObjectOnVirtualCall* value)
+{
+    stackOverflowOnVirtualCall = value;
+}
+
+AbstractPrimaryBase::~AbstractPrimaryBase()
+{
+}
+
+AbstractSecondaryBase::~AbstractSecondaryBase()
+{
+}
+
+ImplementsAbstractsFromPrimaryAndSecondary::ImplementsAbstractsFromPrimaryAndSecondary() : field(200)
+{
+}
+
+ImplementsAbstractsFromPrimaryAndSecondary::~ImplementsAbstractsFromPrimaryAndSecondary()
+{
+}
+
+int ImplementsAbstractsFromPrimaryAndSecondary::abstractInPrimaryBase()
+{
+    return 101;
+}
+
+int ImplementsAbstractsFromPrimaryAndSecondary::abstractInSecondaryBase()
+{
+    return 5;
+}
+
+int ImplementsAbstractsFromPrimaryAndSecondary::abstractReturnsFieldInPrimaryBase()
+{
+    return field + 1;
+}
+
+int ImplementsAbstractsFromPrimaryAndSecondary::abstractReturnsFieldInSecondaryBase()
+{
+    return field + 2;
+}

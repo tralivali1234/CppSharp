@@ -8,7 +8,7 @@ namespace CppSharp.Passes
     /// <summary>
     /// Checks for missing operator overloads required by C#.
     /// </summary>
-    class CheckOperatorsOverloadsPass : TranslationUnitPass
+    public class CheckOperatorsOverloadsPass : TranslationUnitPass
     {
         public CheckOperatorsOverloadsPass()
         {
@@ -26,7 +26,7 @@ namespace CppSharp.Passes
             // Check for C++ operators that cannot be represented in C#.
             CheckInvalidOperators(@class);
 
-            if (Driver.Options.IsCSharpGenerator)
+            if (Options.IsCSharpGenerator)
             {
                 // The comparison operators, if overloaded, must be overloaded in pairs;
                 // that is, if == is overloaded, != must also be overloaded. The reverse
@@ -49,9 +49,9 @@ namespace CppSharp.Passes
         {
             foreach (var @operator in @class.Operators.Where(o => o.IsGenerated))
             {
-                if (!IsValidOperatorOverload(@operator))
+                if (!IsValidOperatorOverload(@operator) || @operator.IsPure)
                 {
-                    Driver.Diagnostics.Debug("Invalid operator overload {0}::{1}",
+                    Diagnostics.Debug("Invalid operator overload {0}::{1}",
                         @class.OriginalName, @operator.OperatorKind);
                     @operator.ExplicitlyIgnore();
                     continue;
@@ -115,7 +115,7 @@ namespace CppSharp.Passes
                 property.QualifiedType = new QualifiedType(
                     pointerType.Pointee, property.QualifiedType.Qualifiers);
 
-            if (Driver.Options.IsCLIGenerator)
+            if (Options.IsCLIGenerator)
                 // C++/CLI uses "default" as the indexer property name.
                 property.Name = "default";
 
@@ -157,21 +157,21 @@ namespace CppSharp.Passes
         static CXXOperatorKind CheckMissingOperatorOverloadPair(Class @class, out int index,
             CXXOperatorKind op1, CXXOperatorKind op2, Type typeLeft, Type typeRight)
         {
-            var first = @class.Operators.FirstOrDefault(o => o.OperatorKind == op1 &&
+            var first = @class.Operators.FirstOrDefault(o => o.IsGenerated && o.OperatorKind == op1 &&
                 o.Parameters.First().Type.Equals(typeLeft) && o.Parameters.Last().Type.Equals(typeRight));
-            var second = @class.Operators.FirstOrDefault(o => o.OperatorKind == op2 &&
+            var second = @class.Operators.FirstOrDefault(o => o.IsGenerated && o.OperatorKind == op2 &&
                 o.Parameters.First().Type.Equals(typeLeft) && o.Parameters.Last().Type.Equals(typeRight));
 
             var hasFirst = first != null;
             var hasSecond = second != null;
 
-            if (hasFirst && (!hasSecond || !second.IsGenerated))
+            if (hasFirst && !hasSecond)
             {
                 index = @class.Methods.IndexOf(first);
                 return op2;
             }
 
-            if (hasSecond && (!hasFirst || !first.IsGenerated))
+            if (hasSecond && !hasFirst)
             {
                 index = @class.Methods.IndexOf(second);
                 return op1;

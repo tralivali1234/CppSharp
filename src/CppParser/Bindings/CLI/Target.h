@@ -44,18 +44,11 @@ namespace CppSharp
 
             ParserTargetInfo(::CppSharp::CppParser::ParserTargetInfo* native);
             static ParserTargetInfo^ __CreateInstance(::System::IntPtr native);
-            static ParserTargetInfo^ __CreateInstance(::System::IntPtr native, bool __ownsNativeInstance);
             ParserTargetInfo();
 
             ParserTargetInfo(CppSharp::Parser::ParserTargetInfo^ _0);
 
             ~ParserTargetInfo();
-
-            property System::String^ ABI
-            {
-                System::String^ get();
-                void set(System::String^);
-            }
 
             property CppSharp::Parser::ParserIntType Char16Type
             {
@@ -283,6 +276,12 @@ namespace CppSharp
             {
                 unsigned int get();
                 void set(unsigned int);
+            }
+
+            property System::String^ ABI
+            {
+                System::String^ get();
+                void set(System::String^);
             }
 
             protected:

@@ -11,7 +11,7 @@ namespace CppSharp.Passes
     {
         public CheckStaticClass()
         {
-            Options.VisitClassBases = false;
+            VisitOptions.VisitClassBases = false;
         }
 
         public override bool VisitDeclaration(Declaration decl)
@@ -19,7 +19,7 @@ namespace CppSharp.Passes
             if (!base.VisitDeclaration(decl))
                 return false;
 
-            if (Driver.Options.IsCSharpGenerator)
+            if (Options.IsCSharpGenerator)
             {
                 // C# cannot have protected members in static classes.
                 var @class = decl.Namespace as Class;

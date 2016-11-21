@@ -17,14 +17,14 @@ namespace CppSharp.Passes
 
         public MultipleInheritancePass()
         {
-            Options.VisitClassFields = false;
-            Options.VisitNamespaceEnums = false;
-            Options.VisitNamespaceVariables = false;
-            Options.VisitTemplateArguments = false;
-            Options.VisitClassMethods = false;
-            Options.VisitClassProperties = false;
-            Options.VisitFunctionReturnType = false;
-            Options.VisitFunctionParameters = false;
+            VisitOptions.VisitClassFields = false;
+            VisitOptions.VisitNamespaceEnums = false;
+            VisitOptions.VisitNamespaceVariables = false;
+            VisitOptions.VisitTemplateArguments = false;
+            VisitOptions.VisitClassMethods = false;
+            VisitOptions.VisitClassProperties = false;
+            VisitOptions.VisitFunctionReturnType = false;
+            VisitOptions.VisitFunctionParameters = false;
         }
 
         public override bool VisitTranslationUnit(TranslationUnit unit)
@@ -38,7 +38,7 @@ namespace CppSharp.Passes
 
         public override bool VisitClassDecl(Class @class)
         {
-            if (!base.VisitClassDecl(@class))
+            if (!base.VisitClassDecl(@class) || !@class.IsGenerated)
                 return false;
 
             // skip the first base because we can inherit from one class
@@ -46,7 +46,7 @@ namespace CppSharp.Passes
             {
                 var @base = @class.Bases[i];
                 var baseClass = @base.Class;
-                if (baseClass.IsInterface) continue;
+                if (baseClass == null || baseClass.IsInterface) continue;
 
                 var @interface = GetInterface(baseClass);
                 @class.Bases[i] = new BaseClassSpecifier(@base) { Type = new TagType(@interface) };
@@ -81,6 +81,7 @@ namespace CppSharp.Passes
 
             @interface.Bases.AddRange(
                 from b in @base.Bases
+                where b.Class != null
                 let i = GetInterface(b.Class)
                 select new BaseClassSpecifier(b) { Type = new TagType(i) });
 
@@ -117,8 +118,23 @@ namespace CppSharp.Passes
 
             @interface.Events.AddRange(@base.Events);
 
-            if (@base.Bases.All(b => b.Class != @interface))
-                @base.Bases.Add(new BaseClassSpecifier { Type = new TagType(@interface) });
+            var type = new QualifiedType(new BuiltinType(PrimitiveType.IntPtr));
+            var adjustmentTo = new Property
+            {
+                Namespace = @interface,
+                Name = "__PointerTo" + @base.Name,
+                QualifiedType = type,
+                GetMethod = new Method
+                {
+                    SynthKind = FunctionSynthKind.InterfaceInstance,
+                    Namespace = @interface,
+                    ReturnType = type
+                }
+            };
+            @interface.Properties.Add(adjustmentTo);
+            @base.Properties.Add(adjustmentTo);
+
+            @base.Bases.Add(new BaseClassSpecifier { Type = new TagType(@interface) });
 
             interfaces.Add(@base, @interface);
             return @interface;
@@ -144,14 +160,21 @@ namespace CppSharp.Passes
             return interfaceProperty;
         }
 
-        private static void ImplementInterfaceMethods(Class @class, Class @interface)
+        private void ImplementInterfaceMethods(Class @class, Class @interface)
         {
             foreach (var method in @interface.Methods)
             {
-                if (@class.Methods.Any(m => m.OriginalName == method.OriginalName &&
-                        m.Parameters.SequenceEqual(method.Parameters.Where(p => !p.Ignore),
-                            ParameterTypeComparer.Instance)))
+                var existingImpl = @class.Methods.FirstOrDefault(
+                    m => m.OriginalName == method.OriginalName &&
+                    m.Parameters.Where(p => !p.Ignore).SequenceEqual(
+                        method.Parameters.Where(p => !p.Ignore),
+                        ParameterTypeComparer.Instance));
+                if (existingImpl != null)
+                {
+                    if (existingImpl.OriginalFunction == null)
+                        existingImpl.OriginalFunction = method;
                     continue;
+                }
                 var impl = new Method(method)
                     {
                         Namespace = @class,

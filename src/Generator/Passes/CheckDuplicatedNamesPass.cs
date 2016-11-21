@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using CppSharp.AST;
+using CppSharp.Generators;
 
 namespace CppSharp.Passes
 {
@@ -10,9 +11,9 @@ namespace CppSharp.Passes
     {
         private readonly Dictionary<string, int> methodSignatures;
         private int Count;
-        private readonly IDiagnosticConsumer diagnostics;
+        private readonly IDiagnostics diagnostics;
 
-        public DeclarationName(IDiagnosticConsumer diagnostics)
+        public DeclarationName(IDiagnostics diagnostics)
         {
             this.diagnostics = diagnostics;
             methodSignatures = new Dictionary<string, int>();
@@ -43,6 +44,9 @@ namespace CppSharp.Passes
 
         private bool UpdateName(Function function)
         {
+            if (function.TranslationUnit.Module != null)
+                Generator.CurrentOutputNamespace = function.TranslationUnit.Module.OutputNamespace;
+
             var @params = function.Parameters.Where(p => p.Kind != ParameterKind.IndirectReturnType)
                                 .Select(p => p.QualifiedType.ToString());
             // Include the conversion type in case of conversion operators
@@ -71,7 +75,8 @@ namespace CppSharp.Passes
 
             if (function.IsOperator)
             {
-                // TODO: turn into a method; append the original type (say, "signed long") of the last parameter to the type so that the user knows which overload is called
+                // TODO: turn into a method; append the original type (say, "signed long")
+                // of the last parameter to the type so that the user knows which overload is called
                 diagnostics.Warning("Duplicate operator {0} ignored", function.Name);
                 function.ExplicitlyIgnore();
             }
@@ -127,7 +132,7 @@ namespace CppSharp.Passes
             if (!VisitDeclaration(decl))
                 return false;
 
-            if (ASTUtils.CheckIgnoreFunction(decl, Driver.Options))
+            if (ASTUtils.CheckIgnoreFunction(decl, Options))
                 return false;
 
             CheckDuplicate(decl);
@@ -139,7 +144,7 @@ namespace CppSharp.Passes
             if (!VisitDeclaration(decl))
                 return false;
 
-            if (ASTUtils.CheckIgnoreMethod(decl, Driver.Options))
+            if (ASTUtils.CheckIgnoreMethod(decl, Options))
                 return false;
 
             if (decl.ExplicitInterfaceImpl == null)
@@ -150,7 +155,7 @@ namespace CppSharp.Passes
 
         public override bool VisitClassDecl(Class @class)
         {
-            if (!VisitDeclaration(@class))
+            if (!base.VisitClassDecl(@class))
                 return false;
 
             if (@class.IsIncomplete)
@@ -164,11 +169,17 @@ namespace CppSharp.Passes
             foreach (var function in @class.Functions)
                 VisitFunctionDecl(function);
 
-            foreach (var fields in GetAllFields(@class).GroupBy(f => f.OriginalName).Where(
-                g => !string.IsNullOrEmpty(g.Key)).Select(g => g.ToList()))
+            if (!@class.IsDependent)
             {
-                for (var i = 1; i < fields.Count; i++)
-                    fields[i].InternalName = fields[i].OriginalName + i;
+                foreach (var fields in @class.Layout.Fields.GroupBy(
+                    f => f.Name).Select(g => g.ToList()))
+                {
+                    for (var i = 1; i < fields.Count; i++)
+                    {
+                        var name = fields[i].Name;
+                        fields[i].Name = (string.IsNullOrEmpty(name) ? "__" : name) + i;
+                    }
+                }
             }
 
             foreach (var property in @class.Properties)
@@ -210,11 +221,11 @@ namespace CppSharp.Passes
 
             // If the name is not yet on the map, then add it.
             if (!names.ContainsKey(fullName))
-                names.Add(fullName, new DeclarationName(Driver.Diagnostics));
+                names.Add(fullName, new DeclarationName(Diagnostics));
 
             if (names[fullName].UpdateName(decl))
             {
-                Driver.Diagnostics.Debug("Duplicate name {0}, renamed to {1}",
+                Diagnostics.Debug("Duplicate name {0}, renamed to {1}",
                     fullName, decl.Name);
             }
         }

@@ -1,5 +1,6 @@
 ﻿using CppSharp.AST;
 using CppSharp.Generators;
+using CppSharp.Types;
 
 namespace CppSharp.Passes
 {
@@ -9,19 +10,17 @@ namespace CppSharp.Passes
     /// </summary>
     public abstract class TranslationUnitPass : AstVisitor
     {
-        public Driver Driver { get; set; }
-        public ASTContext AstContext { get; set; }
-        
-        public IDiagnosticConsumer Log
-        {
-            get { return Driver.Diagnostics; }
-        }
+        public BindingContext Context { get; set; }
+
+        public IDiagnostics Diagnostics { get { return Context.Diagnostics; } }
+        public DriverOptions Options { get { return Context.Options; } }
+        public ASTContext ASTContext { get { return Context.ASTContext; } }
+        public TypeMapDatabase TypeMaps { get { return Context.TypeMaps; } }
 
         public bool ClearVisitedDeclarations = false;
 
-        public virtual bool VisitLibrary(ASTContext context)
+        public virtual bool VisitASTContext(ASTContext context)
         {
-            AstContext = context;
             foreach (var unit in context.TranslationUnits)
                 VisitTranslationUnit(unit);
 
@@ -30,10 +29,7 @@ namespace CppSharp.Passes
 
         public virtual bool VisitTranslationUnit(TranslationUnit unit)
         {
-            if (!unit.IsValid)
-                return false;
-
-            if (unit.IsSystemHeader)
+            if (!unit.IsValid || unit.Ignore)
                 return false;
 
             if (ClearVisitedDeclarations)
@@ -61,7 +57,7 @@ namespace CppSharp.Passes
     /// </summary>
     public abstract class GeneratorOutputPass
     {
-        public Driver Driver { get; set; }
+        public IDiagnostics Log { get; set; }
 
         public virtual void VisitGeneratorOutput(GeneratorOutput output)
         {

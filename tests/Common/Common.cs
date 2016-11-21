@@ -32,12 +32,12 @@ namespace CppSharp.Tests
             return "ushort";
         }
 
-        public override void CSharpMarshalToManaged(MarshalContext ctx)
+        public override void CSharpMarshalToManaged(CSharpMarshalContext ctx)
         {
             ctx.Return.Write(ctx.ReturnVarName);
         }
 
-        public override void CSharpMarshalToNative(MarshalContext ctx)
+        public override void CSharpMarshalToNative(CSharpMarshalContext ctx)
         {
             ctx.Return.Write("IntPtr.Zero");
         }
@@ -56,19 +56,17 @@ namespace CppSharp.Tests
             base.Setup(driver);
 
             driver.Options.OutputNamespace = "CommonTest";
+            driver.Options.UnityBuild = true;
         }
 
         public override void SetupPasses(Driver driver)
         {
             driver.Options.MarshalCharAsManagedChar = true;
-            driver.Options.GenerateProperties = true;
-            driver.Options.GenerateConversionOperators = true;
             driver.Options.GenerateDefaultValuesForArguments = true;
         }
 
         public override void Preprocess(Driver driver, ASTContext ctx)
         {
-            driver.AddTranslationUnitPass(new GetterSetterToPropertyPass());
             driver.AddTranslationUnitPass(new CheckMacroPass());
             ctx.SetClassAsValueType("Bar");
             ctx.SetClassAsValueType("Bar2");
@@ -76,6 +74,10 @@ namespace CppSharp.Tests
 
             ctx.FindCompleteClass("Foo").Enums.First(
                 e => string.IsNullOrEmpty(e.Name)).Name = "RenamedEmptyEnum";
+        }
+
+        public override void Postprocess(Driver driver, ASTContext ctx)
+        {
         }
 
         public static void Main(string[] args)

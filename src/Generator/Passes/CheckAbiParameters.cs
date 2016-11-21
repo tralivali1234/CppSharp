@@ -1,5 +1,4 @@
-﻿using System.Linq;
-using CppSharp.AST;
+﻿using CppSharp.AST;
 
 namespace CppSharp.Passes
 {
@@ -29,7 +28,7 @@ namespace CppSharp.Passes
             if (!base.VisitClassDecl(@class))
                 return false;
 
-            if (HasFieldsOrVirtuals(@class))
+            if (@class.IsDependent || @class.Layout.Fields.Count > 0 || @class.Fields.Count > 0)
                 return false;
 
             @class.Layout.Size = @class.Layout.DataSize = 0;
@@ -68,7 +67,7 @@ namespace CppSharp.Passes
 
             // Deleting destructors (default in v-table) accept an i32 bitfield as a
             // second parameter.in MS ABI.
-            if (method != null && method.IsDestructor && Driver.Options.IsMicrosoftAbi)
+            if (method != null && method.IsDestructor && Context.ParserOptions.IsMicrosoftAbi)
             {
                 method.Parameters.Add(new Parameter
                 {
@@ -81,14 +80,6 @@ namespace CppSharp.Passes
             // TODO: Handle indirect parameters
 
             return true;
-        }
-
-        private static bool HasFieldsOrVirtuals(Class @class)
-        {
-            if (@class.Fields.Count > 0 || @class.IsDynamic)
-                return true;
-            return @class.Bases.Any(@base => @base.IsClass && @base.Class != @class &&
-                HasFieldsOrVirtuals(@base.Class));
         }
     }
 }

@@ -6,7 +6,12 @@ function SetupExampleProject()
   debugdir "."
   
   files { "**.cs", "./*.lua" }
-  links { "CppSharp.AST", "CppSharp.Generator" }
+  links
+  {
+    "CppSharp.AST",
+    "CppSharp.Generator",
+    "CppSharp.Parser"
+  }
 
   SetupManagedProject()
   SetupParser()
@@ -32,10 +37,10 @@ function SetupTestCLI(name)
 end
 
 function SetupManagedTestProject()
+    SetupManagedProject()
     kind "SharedLib"
     language "C#"  
-    flags { "Unsafe" }
-    SetupManagedProject()
+    clr "Unsafe"
 end
 
 function SetupTestGeneratorProject(name, depends)
@@ -52,6 +57,7 @@ function SetupTestGeneratorProject(name, depends)
       "CppSharp.AST",
       "CppSharp.Generator",
       "CppSharp.Generator.Tests",
+      "CppSharp.Parser"
     }
 
     if depends ~= nil then
@@ -64,17 +70,18 @@ function SetupTestGeneratorProject(name, depends)
 end
 
 function SetupTestGeneratorBuildEvent(name)
+  local runtimeExe = os.is("windows") and "" or "mono --debug "
   if string.starts(action, "vs") then
     local exePath = SafePath("$(TargetDir)" .. name .. ".Gen.exe")
-    prebuildcommands { exePath }
+    prebuildcommands { runtimeExe .. exePath }
   else
     local exePath = SafePath("%{cfg.buildtarget.directory}/" .. name .. ".Gen.exe")
-    prebuildcommands { "mono --debug " .. exePath }
+    prebuildcommands { runtimeExe .. exePath }
   end
 end
 
 function SetupTestNativeProject(name, depends)
-  if string.starts(action, "vs") and not os.is_windows() then
+  if string.starts(action, "vs") and not os.is("windows") then
     return
   end
 
@@ -85,7 +92,6 @@ function SetupTestNativeProject(name, depends)
     kind "SharedLib"
     language "C++"
 
-    flags { common_flags }
     files { "**.h", "**.cpp" }
 
     if depends ~= nil then
@@ -107,7 +113,7 @@ function LinkNUnit()
   }
 end
 
-function SetupTestProjectsCSharp(name, depends, extraFiles)
+function SetupTestProjectsCSharp(name, depends)
   project(name .. ".CSharp")
     SetupManagedTestProject()
 
@@ -117,12 +123,8 @@ function SetupTestProjectsCSharp(name, depends, extraFiles)
     files
     {
       path.join(gendir, name, name .. ".cs"),
+      path.join(gendir, name, "Std.cs")
     }
-    if extraFiles ~= nil then
-      for _, file in pairs(extraFiles) do
-        files { path.join(gendir, name, file .. ".cs") }
-      end
-    end
 
     linktable = { "CppSharp.Runtime" }
 
@@ -144,7 +146,7 @@ function SetupTestProjectsCSharp(name, depends, extraFiles)
 end
 
 function SetupTestProjectsCLI(name, extraFiles)
-  if not os.is_windows() then
+  if not os.is("windows") then
     return
   end
 

@@ -11,20 +11,12 @@ CppSharp::Parser::ParserTargetInfo::ParserTargetInfo(::CppSharp::CppParser::Pars
 
 CppSharp::Parser::ParserTargetInfo^ CppSharp::Parser::ParserTargetInfo::__CreateInstance(::System::IntPtr native)
 {
-    return ::CppSharp::Parser::ParserTargetInfo::__CreateInstance(native, false);
-}
-
-CppSharp::Parser::ParserTargetInfo^ CppSharp::Parser::ParserTargetInfo::__CreateInstance(::System::IntPtr native, bool __ownsNativeInstance)
-{
-    ::CppSharp::Parser::ParserTargetInfo^ result = gcnew ::CppSharp::Parser::ParserTargetInfo((::CppSharp::CppParser::ParserTargetInfo*) native.ToPointer());
-    result->__ownsNativeInstance = __ownsNativeInstance;
-    return result;
+    return gcnew ::CppSharp::Parser::ParserTargetInfo((::CppSharp::CppParser::ParserTargetInfo*) native.ToPointer());
 }
 
 CppSharp::Parser::ParserTargetInfo::~ParserTargetInfo()
 {
-    if (__ownsNativeInstance)
-        delete NativePtr;
+    delete NativePtr;
 }
 
 CppSharp::Parser::ParserTargetInfo::ParserTargetInfo()
@@ -36,8 +28,10 @@ CppSharp::Parser::ParserTargetInfo::ParserTargetInfo()
 CppSharp::Parser::ParserTargetInfo::ParserTargetInfo(CppSharp::Parser::ParserTargetInfo^ _0)
 {
     __ownsNativeInstance = true;
-    auto &arg0 = *(::CppSharp::CppParser::ParserTargetInfo*)_0->NativePtr;
-    NativePtr = new ::CppSharp::CppParser::ParserTargetInfo(arg0);
+    if (ReferenceEquals(_0, nullptr))
+        throw gcnew ::System::ArgumentNullException("_0", "Cannot be null because it is a C++ reference (&).");
+    auto &__arg0 = *(::CppSharp::CppParser::ParserTargetInfo*)_0->NativePtr;
+    NativePtr = new ::CppSharp::CppParser::ParserTargetInfo(__arg0);
 }
 
 System::IntPtr CppSharp::Parser::ParserTargetInfo::__Instance::get()
@@ -48,20 +42,6 @@ System::IntPtr CppSharp::Parser::ParserTargetInfo::__Instance::get()
 void CppSharp::Parser::ParserTargetInfo::__Instance::set(System::IntPtr object)
 {
     NativePtr = (::CppSharp::CppParser::ParserTargetInfo*)object.ToPointer();
-}
-
-System::String^ CppSharp::Parser::ParserTargetInfo::ABI::get()
-{
-    auto __ret = ((::CppSharp::CppParser::ParserTargetInfo*)NativePtr)->getABI();
-    if (__ret == nullptr) return nullptr;
-    return clix::marshalString<clix::E_UTF8>(__ret);
-}
-
-void CppSharp::Parser::ParserTargetInfo::ABI::set(System::String^ s)
-{
-    auto _arg0 = clix::marshalString<clix::E_UTF8>(s);
-    auto arg0 = _arg0.c_str();
-    ((::CppSharp::CppParser::ParserTargetInfo*)NativePtr)->setABI(arg0);
 }
 
 CppSharp::Parser::ParserIntType CppSharp::Parser::ParserTargetInfo::Char16Type::get()
@@ -442,5 +422,19 @@ unsigned int CppSharp::Parser::ParserTargetInfo::WCharWidth::get()
 void CppSharp::Parser::ParserTargetInfo::WCharWidth::set(unsigned int value)
 {
     ((::CppSharp::CppParser::ParserTargetInfo*)NativePtr)->WCharWidth = value;
+}
+
+System::String^ CppSharp::Parser::ParserTargetInfo::ABI::get()
+{
+    auto __ret = ((::CppSharp::CppParser::ParserTargetInfo*)NativePtr)->getABI();
+    if (__ret == nullptr) return nullptr;
+    return (__ret == 0 ? nullptr : clix::marshalString<clix::E_UTF8>(__ret));
+}
+
+void CppSharp::Parser::ParserTargetInfo::ABI::set(System::String^ s)
+{
+    auto ___arg0 = clix::marshalString<clix::E_UTF8>(s);
+    auto __arg0 = ___arg0.c_str();
+    ((::CppSharp::CppParser::ParserTargetInfo*)NativePtr)->setABI(__arg0);
 }
 

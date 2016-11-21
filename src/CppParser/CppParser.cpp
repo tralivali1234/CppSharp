@@ -10,7 +10,7 @@
 
 namespace CppSharp { namespace CppParser {
 
-ParserOptions::ParserOptions()
+CppParserOptions::CppParserOptions()
     : ASTContext(0)
     , ToolSetToUse(0)
     , Abi(CppAbi::Itanium)
@@ -18,19 +18,20 @@ ParserOptions::ParserOptions()
     , NoBuiltinIncludes(false)
     , MicrosoftMode(false)
     , Verbose(false)
-    , LanguageVersion(CppParser::LanguageVersion::CPlusPlus11)
+    , LanguageVersion(CppParser::LanguageVersion::GNUPlusPlus11)
     , TargetInfo(0)
 {
 }
 
-DEF_VECTOR_STRING(ParserOptions, Arguments)
-DEF_STRING(ParserOptions, FileName)
-DEF_VECTOR_STRING(ParserOptions, IncludeDirs)
-DEF_VECTOR_STRING(ParserOptions, SystemIncludeDirs)
-DEF_VECTOR_STRING(ParserOptions, Defines)
-DEF_VECTOR_STRING(ParserOptions, Undefines)
-DEF_VECTOR_STRING(ParserOptions, LibraryDirs)
-DEF_STRING(ParserOptions, TargetTriple)
+DEF_VECTOR_STRING(CppParserOptions, Arguments)
+DEF_STRING(CppParserOptions, LibraryFile)
+DEF_VECTOR_STRING(CppParserOptions, SourceFiles)
+DEF_VECTOR_STRING(CppParserOptions, IncludeDirs)
+DEF_VECTOR_STRING(CppParserOptions, SystemIncludeDirs)
+DEF_VECTOR_STRING(CppParserOptions, Defines)
+DEF_VECTOR_STRING(CppParserOptions, Undefines)
+DEF_VECTOR_STRING(CppParserOptions, LibraryDirs)
+DEF_STRING(CppParserOptions, TargetTriple)
 DEF_STRING(ParserTargetInfo, ABI)
 
 ParserResult::ParserResult()

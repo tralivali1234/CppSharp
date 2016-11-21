@@ -12,6 +12,7 @@
 #include <llvm/Object/SymbolicFile.h>
 
 #include <clang/AST/ASTFwd.h>
+#include <clang/AST/DeclTemplate.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/TargetInfo.h>
 #include <clang/Frontend/CompilerInstance.h>
@@ -20,10 +21,8 @@
 #include "CppParser.h"
 
 #include <string>
-typedef std::string String;
 
 namespace clang {
-  class TargetCodeGenInfo;
   namespace CodeGen {
     class CodeGenTypes;
   }
@@ -46,10 +45,10 @@ namespace CppSharp { namespace CppParser {
 class Parser
 {
 public:
-    Parser(ParserOptions* Opts);
+    Parser(CppParserOptions* Opts);
 
     void SetupHeader();
-    ParserResult* ParseHeader(const std::string& File, ParserResult* res);
+    ParserResult* ParseHeader(const std::vector<std::string>& SourceFiles, ParserResult* res);
     ParserResult* ParseLibrary(const std::string& File, ParserResult* res);
     ParserResultKind ParseArchive(llvm::StringRef File,
                                   llvm::object::Archive* Archive,
@@ -59,41 +58,54 @@ public:
                                     CppSharp::CppParser::NativeLibrary*& NativeLib);
     ParserTargetInfo*  GetTargetInfo();
 
-protected:
-
+private:
     // AST traversers
     void WalkAST();
-    void WalkMacros(clang::PreprocessingRecord* PR);
-    Declaration* WalkDeclaration(clang::Decl* D,
-        bool IgnoreSystemDecls = true, bool CanBeDefinition = false);
+    Declaration* WalkDeclaration(const clang::Decl* D, bool CanBeDefinition = false);
     Declaration* WalkDeclarationDef(clang::Decl* D);
-    Enumeration* WalkEnum(clang::EnumDecl* ED);
+    Enumeration* WalkEnum(const clang::EnumDecl* ED);
 	Enumeration::Item* WalkEnumItem(clang::EnumConstantDecl* ECD);
-    Function* WalkFunction(clang::FunctionDecl* FD, bool IsDependent = false,
+    Function* WalkFunction(const clang::FunctionDecl* FD, bool IsDependent = false,
         bool AddToNamespace = true);
-    Class* GetRecord(clang::RecordDecl* Record, bool& IsComplete);
-    Class* WalkRecord(clang::RecordDecl* Record);
-    void WalkRecord(clang::RecordDecl* Record, Class* RC);
-    Class* WalkRecordCXX(clang::CXXRecordDecl* Record);
-    void WalkRecordCXX(clang::CXXRecordDecl* Record, Class* RC);
+    void EnsureCompleteRecord(const clang::RecordDecl* Record, DeclarationContext* NS, Class* RC);
+    Class* GetRecord(const clang::RecordDecl* Record, bool& IsComplete);
+    Class* WalkRecord(const clang::RecordDecl* Record);
+    void WalkRecord(const clang::RecordDecl* Record, Class* RC);
+    Class* WalkRecordCXX(const clang::CXXRecordDecl* Record);
+    void WalkRecordCXX(const clang::CXXRecordDecl* Record, Class* RC);
     ClassTemplateSpecialization*
-    WalkClassTemplateSpecialization(clang::ClassTemplateSpecializationDecl* CTS);
+    WalkClassTemplateSpecialization(const clang::ClassTemplateSpecializationDecl* CTS);
     ClassTemplatePartialSpecialization*
-    WalkClassTemplatePartialSpecialization(clang::ClassTemplatePartialSpecializationDecl* CTS);
-    Method* WalkMethodCXX(clang::CXXMethodDecl* MD, bool AddToClass = true);
-    Field* WalkFieldCXX(clang::FieldDecl* FD, Class* Class);
-    ClassTemplate* WalkClassTemplate(clang::ClassTemplateDecl* TD);
-    FunctionTemplate* WalkFunctionTemplate(clang::FunctionTemplateDecl* TD);
+    WalkClassTemplatePartialSpecialization(const clang::ClassTemplatePartialSpecializationDecl* CTS);
+    Method* WalkMethodCXX(const clang::CXXMethodDecl* MD);
+    Field* WalkFieldCXX(const clang::FieldDecl* FD, Class* Class);
     FunctionTemplateSpecialization* WalkFunctionTemplateSpec(clang::FunctionTemplateSpecializationInfo* FTS, Function* Function);
-    Variable* WalkVariable(clang::VarDecl* VD);
-    Friend* WalkFriend(clang::FriendDecl* FD);
+    Variable* WalkVariable(const clang::VarDecl* VD);
+    void WalkVariable(const clang::VarDecl* VD, Variable* Var);
+    Friend* WalkFriend(const clang::FriendDecl* FD);
     RawComment* WalkRawComment(const clang::RawComment* RC);
+    bool ShouldCompleteType(const clang::QualType& QualType, bool LocValid);
     Type* WalkType(clang::QualType QualType, clang::TypeLoc* TL = 0,
       bool DesugarType = false);
     TemplateArgument WalkTemplateArgument(const clang::TemplateArgument& TA, clang::TemplateArgumentLoc* ArgLoc);
+    TemplateTemplateParameter* WalkTemplateTemplateParameter(const clang::TemplateTemplateParmDecl* TTP);
+    TypeTemplateParameter* WalkTypeTemplateParameter(const clang::TemplateTypeParmDecl* TTPD);
+    NonTypeTemplateParameter* WalkNonTypeTemplateParameter(const clang::NonTypeTemplateParmDecl* TTPD);
+    std::vector<Declaration*> WalkTemplateParameterList(const clang::TemplateParameterList* TPL);
+    TypeAliasTemplate* WalkTypeAliasTemplate(const clang::TypeAliasTemplateDecl* TD);
+    ClassTemplate* WalkClassTemplate(const clang::ClassTemplateDecl* TD);
+    FunctionTemplate* WalkFunctionTemplate(const clang::FunctionTemplateDecl* TD);
+    VarTemplate* WalkVarTemplate(const clang::VarTemplateDecl* VT);
+    VarTemplateSpecialization*
+    WalkVarTemplateSpecialization(const clang::VarTemplateSpecializationDecl* VTS);
+    VarTemplatePartialSpecialization*
+    WalkVarTemplatePartialSpecialization(const clang::VarTemplatePartialSpecializationDecl* VTS);
     std::vector<TemplateArgument> WalkTemplateArgumentList(const clang::TemplateArgumentList* TAL, clang::TemplateSpecializationTypeLoc* TSTL);
     std::vector<TemplateArgument> WalkTemplateArgumentList(const clang::TemplateArgumentList* TAL, const clang::ASTTemplateArgumentListInfo* TSTL);
-    void WalkVTable(clang::CXXRecordDecl* RD, Class* C);
+    void WalkVTable(const clang::CXXRecordDecl* RD, Class* C);
+    QualifiedType GetQualifiedType(const clang::QualType& qual, clang::TypeLoc* TL = 0);
+    void ReadClassLayout(Class* Class, const clang::RecordDecl* RD, clang::CharUnits Offset, bool IncludeVirtualBases);
+    LayoutField WalkVTablePointer(Class* Class, const clang::CharUnits& Offset, const std::string& prefix);
     VTableLayout WalkVTableLayout(const clang::VTableLayout& VTLayout);
     VTableComponent WalkVTableComponent(const clang::VTableComponent& Component);
     PreprocessedEntity* WalkPreprocessedEntity(Declaration* Decl,
@@ -104,9 +116,10 @@ protected:
     // Clang helpers
     SourceLocationKind GetLocationKind(const clang::SourceLocation& Loc);
     bool IsValidDeclaration(const clang::SourceLocation& Loc);
-    std::string GetDeclMangledName(clang::Decl* D);
+    std::string GetDeclMangledName(const clang::Decl* D);
     std::string GetTypeName(const clang::Type* Type);
-    void WalkFunction(clang::FunctionDecl* FD, Function* F,
+    bool CanCheckCodeGenInfo(clang::Sema & S, const clang::Type * Ty);
+    void WalkFunction(const clang::FunctionDecl* FD, Function* F,
         bool IsDependent = false);
     void HandlePreprocessedEntities(Declaration* Decl);
     void HandlePreprocessedEntities(Declaration* Decl, clang::SourceRange sourceRange,
@@ -117,27 +130,22 @@ protected:
         SourceLocationKind *Kind = 0);
     TranslationUnit* GetTranslationUnit(const clang::Decl* D);
 
-    DeclarationContext* GetNamespace(clang::Decl* D, clang::DeclContext* Ctx);
-    DeclarationContext* GetNamespace(clang::Decl* D);
+    DeclarationContext* GetNamespace(const clang::Decl* D, const clang::DeclContext* Ctx);
+    DeclarationContext* GetNamespace(const clang::Decl* D);
 
-    clang::CallingConv GetAbiCallConv(clang::CallingConv CC,
-        bool IsInstMethod, bool IsVariadic);
-
-    void HandleDeclaration(clang::Decl* D, Declaration* Decl);
-    void HandleOriginalText(clang::Decl* D, Declaration* Decl);
-    void HandleComments(clang::Decl* D, Declaration* Decl);
+    void HandleDeclaration(const clang::Decl* D, Declaration* Decl);
+    void HandleOriginalText(const clang::Decl* D, Declaration* Decl);
+    void HandleComments(const clang::Decl* D, Declaration* Decl);
     void HandleDiagnostics(ParserResult* res);
 
     int Index;
     ASTContext* Lib;
-    ParserOptions* Opts;
+    CppParserOptions* Opts;
     std::unique_ptr<clang::CompilerInstance> C;
     clang::ASTContext* AST;
     clang::TargetCXXABI::Kind TargetABI;
-    clang::TargetCodeGenInfo* CodeGenInfo;
     clang::CodeGen::CodeGenTypes* CodeGenTypes;
 
-private:
     ParserResultKind ReadSymbols(llvm::StringRef File,
                                  llvm::object::basic_symbol_iterator Begin,
                                  llvm::object::basic_symbol_iterator End,

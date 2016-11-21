@@ -29,7 +29,6 @@ namespace CppSharp.Utils
             options.GeneratorKind = kind;
             options.OutputDir = Path.Combine(GetOutputDirectory(), "gen", name);
             options.SharedLibraryName = name + ".Native";
-            options.GenerateLibraryNamespace = true;
             options.Quiet = true;
             options.IgnoreParseWarnings = true;
 
@@ -42,30 +41,12 @@ namespace CppSharp.Utils
             if (!Platform.IsMono)
                 options.SharedLibraryName += ".dll";
 
+            var parserOptions = driver.ParserOptions;
             if (Platform.IsMacOS)
-                options.TargetTriple = Environment.Is64BitProcess ? "x86_64-apple-darwin" : "i686-apple-darwin";
+                parserOptions.TargetTriple = Environment.Is64BitProcess ? "x86_64-apple-darwin" : "i686-apple-darwin";
 
             var path = Path.GetFullPath(GetTestsDirectory(name));
-            options.addIncludeDirs(path);
-
-#if BROKEN
-            var foundClangResourceDir = false;
-            for (uint i = 0; i < options.SystemIncludeDirsCount; ++i)
-            {
-                var dir = options.getSystemIncludeDirs(i);
-                if (dir.Contains(Path.Combine("lib", "clang")))
-                {
-                    foundClangResourceDir = true;
-                    break;
-                }
-            }
-
-            if (!foundClangResourceDir)
-            {
-                var dir = Path.GetFullPath(Path.Combine(path, "../../deps/llvm/tools/clang/lib/Headers"));
-                options.addSystemIncludeDirs(dir);
-            }
-#endif
+            parserOptions.AddIncludeDirs(path);
 
             driver.Diagnostics.Message("Looking for tests in: {0}", path);
             var files = Directory.EnumerateFiles(path, "*.h");

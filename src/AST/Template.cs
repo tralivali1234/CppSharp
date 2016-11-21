@@ -4,19 +4,130 @@ using System.Linq;
 
 namespace CppSharp.AST
 {
+    public class TemplateTemplateParameter : Template
+    {
+        /// <summary>
+        /// Whether this template template parameter is a template parameter pack.
+        /// <para>template&lt;template&lt;class T&gt; ...MetaFunctions&gt; struct Apply;</para>
+        /// </summary>
+        public bool IsParameterPack { get; set; }
+
+        /// <summary>
+        /// Whether this parameter pack is a pack expansion.
+        /// <para>A template template parameter pack is a pack expansion if its template parameter list contains an unexpanded parameter pack.</para>
+        /// </summary>
+        public bool IsPackExpansion { get; set; }
+
+        /// <summary>
+        /// Whether this parameter is a template template parameter pack that has a known list of different template parameter lists at different positions.
+        /// A parameter pack is an expanded parameter pack when the original parameter pack's template parameter list was itself a pack expansion, and that expansion has already been expanded. For exampe, given:
+        /// <para>
+        /// template&lt;typename...Types&gt; struct Outer { template&lt;template&lt;Types&gt; class...Templates> struct Inner; };
+        /// </para>
+        /// The parameter pack Templates is a pack expansion, which expands the pack Types.When Types is supplied with template arguments by instantiating Outer, the instantiation of Templates is an expanded parameter pack.
+        /// </summary>
+        public bool IsExpandedParameterPack { get; set; }
+
+        public override T Visit<T>(IDeclVisitor<T> visitor)
+        {
+            return visitor.VisitTemplateTemplateParameterDecl(this);
+        }
+    }
+
     /// <summary>
     /// Represents a template parameter
     /// </summary>
-    public struct TemplateParameter
+    public class TypeTemplateParameter : Declaration
     {
-        public string Name;
+        /// <summary>
+        /// Get the nesting depth of the template parameter.
+        /// </summary>
+        public uint Depth { get; set; }
+
+        /// <summary>
+        /// Get the index of the template parameter within its parameter list.
+        /// </summary>
+        public uint Index { get; set; }
+
+        /// <summary>
+        /// Whether this parameter is a non-type template parameter pack.
+        /// <para>
+        /// If the parameter is a parameter pack, the type may be a PackExpansionType.In the following example, the Dims parameter is a parameter pack (whose type is 'unsigned').
+        /// <para>template&lt;typename T, unsigned...Dims&gt; struct multi_array;</para>
+        /// </para>
+        /// </summary>
+        public bool IsParameterPack { get; set; }
 
         // Generic type constraint
         public string Constraint;
 
-        // Whether the template parameter represents a type parameter,
-        // like "T" in template<typename T>.
-        public bool IsTypeParameter;
+        public QualifiedType DefaultArgument { get; set; }
+
+        public override T Visit<T>(IDeclVisitor<T> visitor)
+        {
+            return visitor.VisitTemplateParameterDecl(this);
+        }
+    }
+
+    /// <summary>
+    /// Represents a hard-coded template parameter
+    /// </summary>
+    public class NonTypeTemplateParameter : Declaration
+    {
+        /// <summary>
+        /// Get the nesting depth of the template parameter.
+        /// </summary>
+        public uint Depth { get; set; }
+
+        /// <summary>
+        /// Get the index of the template parameter within its parameter list.
+        /// </summary>
+        public uint Index { get; set; }
+
+        /// <summary>
+        /// Whether this parameter is a non-type template parameter pack.
+        /// <para>
+        /// If the parameter is a parameter pack, the type may be a PackExpansionType.In the following example, the Dims parameter is a parameter pack (whose type is 'unsigned').
+        /// <para>template&lt;typename T, unsigned...Dims&gt; struct multi_array;</para>
+        /// </para>
+        /// </summary>
+        public bool IsParameterPack { get; set; }
+
+        public Expression DefaultArgument { get; set; }
+
+        /// <summary>
+        /// Get the position of the template parameter within its parameter list.
+        /// </summary>
+        public uint Position { get; set; }
+
+        /// <summary>
+        /// Whether this parameter pack is a pack expansion.
+        /// <para>
+        /// A non-type template parameter pack is a pack expansion if its type contains an unexpanded parameter pack.In this case, we will have built a PackExpansionType wrapping the type.
+        /// </para>
+        /// </summary>
+        public bool IsPackExpansion { get; set; }
+
+        /// <summary>
+        /// Whether this parameter is a non-type template parameter pack that has a known list of different types at different positions.
+        /// <para>A parameter pack is an expanded parameter pack when the original parameter pack's type was itself a pack expansion, and that expansion has already been expanded. For example, given:</para>
+        /// <para>
+        /// template&lt;typename...Types&gt;
+        /// struct X {
+        ///   template&lt;Types...Values&gt;
+        ///   struct Y { /* ... */ };
+        /// };
+        /// </para>
+        /// The parameter pack Values has a PackExpansionType as its type, which expands Types.When Types is supplied with template arguments by instantiating X,
+        /// the instantiation of Values becomes an expanded parameter pack.For example, instantiating X&lt;int, unsigned int&gt;
+        /// results in Values being an expanded parameter pack with expansion types int and unsigned int.
+        /// </summary>
+        public bool IsExpandedParameterPack { get; set; }
+
+        public override T Visit<T>(IDeclVisitor<T> visitor)
+        {
+            return visitor.VisitNonTypeTemplateParameterDecl(this);
+        }
     }
 
     /// <summary>
@@ -44,22 +155,33 @@ namespace CppSharp.AST
 
         protected Template()
         {
-            Parameters = new List<TemplateParameter>();
+            Parameters = new List<Declaration>();
         }
 
         protected Template(Declaration decl)
         {
             TemplatedDecl = decl;
-            Parameters = new List<TemplateParameter>();
+            Parameters = new List<Declaration>();
         }
 
         public Declaration TemplatedDecl;
 
-        public List<TemplateParameter> Parameters;
+        public List<Declaration> Parameters;
 
         public override string ToString()
         {
             return TemplatedDecl.ToString();
+        }
+    }
+
+    /// <summary>
+    /// Declaration of a type alias template.
+    /// </summary>
+    public class TypeAliasTemplate : Template
+    {
+        public override T Visit<T>(IDeclVisitor<T> visitor)
+        {
+            return visitor.VisitTypeAliasTemplateDecl(this);
         }
     }
 
@@ -179,6 +301,17 @@ namespace CppSharp.AST
         {
             Arguments = new List<TemplateArgument>();
         }
+
+        public override T Visit<T>(IDeclVisitor<T> visitor)
+        {
+            return visitor.VisitClassTemplateSpecializationDecl(this);
+        }
+
+        public override string ToString()
+        {
+            var args = string.Join(", ", Arguments.Select(a => a.ToString()));
+            return string.Format("{0}<{1}> [{2}]", OriginalName, args, SpecializationKind);
+        }
     }
 
     /// <summary>
@@ -245,5 +378,64 @@ namespace CppSharp.AST
             SpecializedFunction = fts.SpecializedFunction;
             SpecializationKind = fts.SpecializationKind;
         }
+
+        public T Visit<T>(IDeclVisitor<T> visitor)
+        {
+            return visitor.VisitFunctionTemplateSpecializationDecl(this);
+        }
+    }
+
+    /// <summary>
+    /// Represents a declaration of a variable template.
+    /// </summary>
+    public class VarTemplate : Template
+    {
+        public List<VarTemplateSpecialization> Specializations;
+
+        public Variable TemplatedVariable
+        {
+            get { return TemplatedDecl as Variable; }
+        }
+
+        public VarTemplate()
+        {
+            Specializations = new List<VarTemplateSpecialization>();
+        }
+
+        public VarTemplate(Variable var) : base(var)
+        {
+            Specializations = new List<VarTemplateSpecialization>();
+        }
+
+        public override T Visit<T>(IDeclVisitor<T> visitor)
+        {
+            return visitor.VisitVarTemplateDecl(this);
+        }
+    }
+
+    /// <summary>
+    /// Represents a var template specialization, which refers to a var
+    /// template with a given set of template arguments.
+    /// </summary>
+    public class VarTemplateSpecialization : Variable
+    {
+        public VarTemplate TemplatedDecl;
+
+        public List<TemplateArgument> Arguments;
+
+        public TemplateSpecializationKind SpecializationKind;
+
+        public VarTemplateSpecialization()
+        {
+            Arguments = new List<TemplateArgument>();
+        }
+    }
+
+    /// <summary>
+    /// Represents a variable template partial specialization, which refers to
+    /// a variable template with a given partial set of template arguments.
+    /// </summary>
+    public class VarTemplatePartialSpecialization : VarTemplateSpecialization
+    {
     }
 }

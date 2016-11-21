@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace CppSharp.AST
 {
@@ -31,6 +32,7 @@ namespace CppSharp.AST
 
         public bool VisitFunctionReturnType = true;
         public bool VisitFunctionParameters = true;
+        public bool VisitEventParameters = true;
         public bool VisitTemplateArguments = true;
     }
 
@@ -43,12 +45,12 @@ namespace CppSharp.AST
     public abstract class AstVisitor : IAstVisitor<bool>, IAstVisited
     {
         public ISet<object> Visited { get; private set; }
-        public AstVisitorOptions Options { get; private set; }
+        public AstVisitorOptions VisitOptions { get; private set; }
 
         protected AstVisitor()
         {
             Visited = new HashSet<object>();
-            Options = new AstVisitorOptions();
+            VisitOptions = new AstVisitorOptions();
         }
 
         public bool AlreadyVisited(Type type)
@@ -58,7 +60,7 @@ namespace CppSharp.AST
 
         public bool AlreadyVisited(Declaration decl)
         {
-            return  !Visited.Add(decl);
+            return !Visited.Add(decl);
         }
 
         #region Type Visitors
@@ -96,7 +98,7 @@ namespace CppSharp.AST
             if (function.ReturnType.Type != null)
                 function.ReturnType.Visit(this);
 
-            if (Options.VisitFunctionParameters)
+            if (VisitOptions.VisitFunctionParameters)
                 foreach (var param in function.Parameters)
                     param.Visit(this);
 
@@ -111,7 +113,7 @@ namespace CppSharp.AST
             if (pointer.Pointee == null)
                 return false;
 
-            return pointer.Pointee.Visit(this, quals);
+            return pointer.QualifiedPointee.Visit(this);
         }
 
         public virtual bool VisitMemberPointerType(MemberPointerType member,
@@ -161,7 +163,7 @@ namespace CppSharp.AST
             if (!VisitType(template, quals))
                 return false;
 
-            if (Options.VisitTemplateArguments)
+            if (VisitOptions.VisitTemplateArguments)
             {
                 foreach (var arg in template.Arguments)
                 {
@@ -179,16 +181,47 @@ namespace CppSharp.AST
                 }
             }
 
-            return template.Template.Visit(this);
+            if (template.IsDependent && template.Template != null)
+                return template.Template.Visit(this);
+
+            var specialization = template.GetClassTemplateSpecialization();
+            return specialization != null && specialization.Visit(this);
+        }
+
+        public bool VisitDependentTemplateSpecializationType(
+            DependentTemplateSpecializationType template, TypeQualifiers quals)
+        {
+            if (!VisitType(template, quals))
+                return false;
+
+            if (VisitOptions.VisitTemplateArguments)
+            {
+                foreach (var arg in template.Arguments)
+                {
+                    switch (arg.Kind)
+                    {
+                        case TemplateArgument.ArgumentKind.Type:
+                            var type = arg.Type.Type;
+                            if (type != null)
+                                type.Visit(this, arg.Type.Qualifiers);
+                            break;
+                        case TemplateArgument.ArgumentKind.Declaration:
+                            arg.Declaration.Visit(this);
+                            break;
+                    }
+                }
+            }
+
+            if (template.Desugared.Type != null)
+                return template.Desugared.Visit(this);
+
+            return false;
         }
 
         public virtual bool VisitTemplateParameterType(TemplateParameterType param,
             TypeQualifiers quals)
         {
-            if (!VisitType(param, quals))
-                return false;
-
-            return true;
+            return VisitType(param, quals);
         }
 
         public virtual bool VisitTemplateParameterSubstitutionType(
@@ -223,12 +256,30 @@ namespace CppSharp.AST
             return true;
         }
 
+        public bool VisitUnaryTransformType(UnaryTransformType unaryTransformType, TypeQualifiers quals)
+        {
+            return true;
+        }
+
+        public bool VisitVectorType(VectorType vectorType, TypeQualifiers quals)
+        {
+            return true;
+        }
+
         public virtual bool VisitPrimitiveType(PrimitiveType type, TypeQualifiers quals)
         {
             return true;
         }
 
         public virtual bool VisitCILType(CILType type, TypeQualifiers quals)
+        {
+            if (!VisitType(type, quals))
+                return false;
+
+            return true;
+        }
+
+        public virtual bool VisitUnsupportedType(UnsupportedType type, TypeQualifiers quals)
         {
             if (!VisitType(type, quals))
                 return false;
@@ -255,20 +306,20 @@ namespace CppSharp.AST
             if (!VisitDeclarationContext(@class))
                 return false;
 
-            if (Options.VisitClassBases)
+            if (VisitOptions.VisitClassBases)
                 foreach (var baseClass in @class.Bases)
                     if (baseClass.IsClass)
-                        VisitClassDecl(baseClass.Class);
+                        baseClass.Class.Visit(this);
 
-            if (Options.VisitClassFields)
+            if (VisitOptions.VisitClassFields)
                 foreach (var field in @class.Fields)
                     VisitFieldDecl(field);
 
-            if (Options.VisitClassProperties)
+            if (VisitOptions.VisitClassProperties)
                 foreach (var property in @class.Properties)
                     VisitProperty(property);
 
-            if (Options.VisitClassMethods)
+            if (VisitOptions.VisitClassMethods)
             {
                 var methods = @class.Methods.ToArray();
                 foreach (var method in methods)
@@ -291,7 +342,7 @@ namespace CppSharp.AST
             if (!VisitDeclaration(property))
                 return false;
 
-            if (Options.VisitFunctionReturnType)
+            if (VisitOptions.VisitFunctionReturnType)
                 return property.Type.Visit(this);
 
             return true;
@@ -311,10 +362,10 @@ namespace CppSharp.AST
                 return false;
 
             var retType = function.ReturnType;
-            if (Options.VisitFunctionReturnType && retType.Type != null)
+            if (VisitOptions.VisitFunctionReturnType && retType.Type != null)
                 retType.Type.Visit(this, retType.Qualifiers);
 
-            if (Options.VisitFunctionParameters)
+            if (VisitOptions.VisitFunctionParameters)
                 foreach (var param in function.Parameters)
                     param.Visit(this);
 
@@ -345,13 +396,24 @@ namespace CppSharp.AST
             return typedef.Type.Visit(this, typedef.QualifiedType.Qualifiers);
         }
 
+        public bool VisitTypeAliasDecl(TypeAlias typeAlias)
+        {
+            if (!VisitDeclaration(typeAlias))
+                return false;
+
+            if (typeAlias.Type == null)
+                return false;
+
+            return typeAlias.Type.Visit(this, typeAlias.QualifiedType.Qualifiers);
+        }
+
         public virtual bool VisitEnumDecl(Enumeration @enum)
         {
             if (!VisitDeclaration(@enum))
                 return false;
 
             foreach (var item in @enum.Items)
-                VisitEnumItem(item);
+                VisitEnumItemDecl(item);
 
             return true;
         }
@@ -364,8 +426,19 @@ namespace CppSharp.AST
             return variable.Type.Visit(this, variable.QualifiedType.Qualifiers);
         }
 
-        public virtual bool VisitEnumItem(Enumeration.Item item)
+        public virtual bool VisitEnumItemDecl(Enumeration.Item item)
         {
+            return true;
+        }
+
+        public virtual bool VisitTypeAliasTemplateDecl(TypeAliasTemplate template)
+        {
+            if (!VisitDeclaration(template))
+                return false;
+
+            foreach (var templateParameter in template.Parameters)
+                templateParameter.Visit(this);
+
             return true;
         }
 
@@ -374,20 +447,67 @@ namespace CppSharp.AST
             if (!VisitDeclaration(template))
                 return false;
 
+            foreach (var templateParameter in template.Parameters)
+                templateParameter.Visit(this);
+
+            foreach (var specialization in template.Specializations)
+                specialization.Visit(this);
+
+            template.TemplatedClass.Visit(this);
+
             return true;
+        }
+
+        public virtual bool VisitClassTemplateSpecializationDecl(ClassTemplateSpecialization specialization)
+        {
+            return VisitClassDecl(specialization);
         }
 
         public virtual bool VisitFunctionTemplateDecl(FunctionTemplate template)
         {
             if (!VisitDeclaration(template))
-                return false; 
-            
-            return template.TemplatedFunction.Visit(this);
+                return false;
+
+            foreach (var templateParameter in template.Parameters)
+                templateParameter.Visit(this);
+
+            foreach (var specialization in template.Specializations)
+                specialization.Visit(this);
+
+            template.TemplatedFunction.Visit(this);
+
+            return true;
+        }
+
+        public virtual bool VisitFunctionTemplateSpecializationDecl(FunctionTemplateSpecialization specialization)
+        {
+            return specialization.SpecializedFunction.Visit(this);
+        }
+
+        public bool VisitVarTemplateDecl(VarTemplate template)
+        {
+            if (!VisitDeclaration(template))
+                return false;
+
+            foreach (var templateParameter in template.Parameters)
+                templateParameter.Visit(this);
+
+            foreach (var specialization in template.Specializations)
+                specialization.Visit(this);
+
+            template.TemplatedVariable.Visit(this);
+
+            return true; 
+        }
+
+        public bool VisitVarTemplateSpecializationDecl(VarTemplateSpecialization specialization)
+        {
+            return VisitVariableDecl(specialization);
         }
 
         public virtual bool VisitMacroDefinition(MacroDefinition macro)
         {
-            return VisitDeclaration(macro);
+            return false;
         }
 
         public virtual bool VisitNamespace(Namespace @namespace)
@@ -406,23 +526,23 @@ namespace CppSharp.AST
             foreach (var decl in context.Functions)
                 decl.Visit(this);
 
-            if (Options.VisitNamespaceEnums)
+            if (VisitOptions.VisitNamespaceEnums)
                 foreach (var decl in context.Enums)
                   decl.Visit(this);
 
-            if (Options.VisitNamespaceTemplates)
+            if (VisitOptions.VisitNamespaceTemplates)
                 foreach (var decl in context.Templates)
                     decl.Visit(this);
 
-            if (Options.VisitNamespaceTypedefs)
+            if (VisitOptions.VisitNamespaceTypedefs)
                 foreach (var decl in context.Typedefs)
                     decl.Visit(this);
 
-            if (Options.VisitNamespaceVariables)
+            if (VisitOptions.VisitNamespaceVariables)
                 foreach (var decl in context.Variables)
                     decl.Visit(this);
 
-            if (Options.VisitNamespaceEvents)
+            if (VisitOptions.VisitNamespaceEvents)
                 foreach (var decl in context.Events)
                     decl.Visit(this);
 
@@ -437,8 +557,36 @@ namespace CppSharp.AST
             if (!VisitDeclaration(@event))
                 return false;
 
-            foreach (var param in @event.Parameters)
-                param.Visit(this);
+            if (VisitOptions.VisitEventParameters)
+                foreach (var param in @event.Parameters)
+                    param.Visit(this);
+
+            return true;
+        }
+
+        public bool VisitTemplateTemplateParameterDecl(TemplateTemplateParameter templateTemplateParameter)
+        {
+            if (!VisitDeclaration(templateTemplateParameter))
+                return false;
+
+            foreach (var templateParameter in templateTemplateParameter.Parameters)
+                templateParameter.Visit(this);
+
+            return true;
+        }
+
+        public virtual bool VisitTemplateParameterDecl(TypeTemplateParameter templateParameter)
+        {
+            if (!VisitDeclaration(templateParameter))
+                return false;
+
+            return true;
+        }
+
+        public bool VisitNonTypeTemplateParameterDecl(NonTypeTemplateParameter nonTypeTemplateParameter)
+        {
+            if (!VisitDeclaration(nonTypeTemplateParameter))
+                return false;
 
             return true;
         }

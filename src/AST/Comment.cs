@@ -174,6 +174,8 @@ namespace CppSharp.AST
             get { return (CommentCommandKind) CommandId; }
         }
 
+        public ParagraphComment ParagraphComment { get; set; }
+
         public List<Argument> Arguments;
 
         public BlockCommandComment()
@@ -330,6 +332,8 @@ namespace CppSharp.AST
         {
             Kind = CommentKind.InlineContentComment;
         }
+
+        public bool HasTrailingNewline { get; set; }
     }
 
     /// <summary>
@@ -424,6 +428,13 @@ namespace CppSharp.AST
             RenderEmphasized
         }
 
+        public uint CommandId { get; set; }
+
+        public CommentCommandKind CommandKind
+        {
+            get { return (CommentCommandKind) CommandId; }
+        }
+
         public RenderKind CommentRenderKind;
 
         public List<Argument> Arguments;
@@ -490,6 +501,7 @@ namespace CppSharp.AST
         Constant,
         Copyright,
         Date,
+        Def,
         Defgroup,
         Dependency,
         Deprecated,
@@ -500,6 +512,7 @@ namespace CppSharp.AST
         E,
         Em,
         Enum,
+        Exception,
         Flbrace,
         Frbrace,
         Flsquare,
@@ -572,6 +585,8 @@ namespace CppSharp.AST
         Templatefield,
         Textblock,
         Slashtextblock,
+        Throw,
+        Throws,
         Todo,
         Tparam,
         Typedef,

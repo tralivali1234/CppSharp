@@ -20,8 +20,8 @@ namespace CppSharp.Passes
             if (char.IsNumber(name[0]))
                 return '_' + name;
 
-            if (Driver.Options.IsCLIGenerator)
-                return CLITextTemplate.SafeIdentifier(name);
+            if (Options.IsCLIGenerator)
+                return CLITemplate.SafeIdentifier(name);
             return Helpers.SafeIdentifier(name);
         }
 
@@ -62,6 +62,17 @@ namespace CppSharp.Passes
             uniqueName = 0;
             base.VisitClassDecl(@class);
             uniqueName = currentUniqueName;
+
+            if (!@class.IsDependent)
+                foreach (var field in @class.Layout.Fields.Where(f => string.IsNullOrEmpty(f.Name)))
+                    field.Name = @class.Name == "_" ? "__" : "_";
+
+            if (@class is ClassTemplateSpecialization &&
+                !(from c in @class.Namespace.Classes
+                  where c.Name == @class.Name && !(@class is ClassTemplateSpecialization) &&
+                      c != ((ClassTemplateSpecialization) @class).TemplatedDecl.TemplatedClass
+                  select c).Any())
+                return true;
 
             if (@class.Namespace.Classes.Any(d => d != @class && d.Name == @class.Name))
             {
@@ -108,25 +119,6 @@ namespace CppSharp.Passes
             return ret;
         }
 
-        public override bool VisitTypedefDecl(TypedefDecl typedef)
-        {
-            if (base.VisitTypedefDecl(typedef))
-                return false;
-
-            var @class = typedef.Namespace.FindClass(typedef.Name);
-
-            // Clang will walk the typedef'd tag decl and the typedef decl,
-            // so we ignore the class and process just the typedef.
-
-            if (@class != null)
-                typedef.ExplicitlyIgnore();
-
-            if (typedef.Type == null)
-                typedef.ExplicitlyIgnore();
-
-            return true;
-        }
-
         private void CheckEnumName(Enumeration @enum)
         {
             // If we still do not have a valid name, then try to guess one
@@ -145,8 +137,12 @@ namespace CppSharp.Passes
                 return;
             }
 
-            prefix = prefix.Trim().Trim('_');
-            @enum.Name = prefix;
+            var prefixBuilder = new StringBuilder(prefix);
+            prefixBuilder.TrimUnderscores();
+            while (@enum.Namespace.Enums.Any(e => e != @enum &&
+                e.Name == prefixBuilder.ToString()))
+                prefixBuilder.Append('_');
+            @enum.Name = prefixBuilder.ToString();
         }
 
         public override bool VisitEnumDecl(Enumeration @enum)
@@ -158,9 +154,9 @@ namespace CppSharp.Passes
             return true;
         }
 
-        public override bool VisitEnumItem(Enumeration.Item item)
+        public override bool VisitEnumItemDecl(Enumeration.Item item)
         {
-            if (!base.VisitEnumItem(item))
+            if (!base.VisitEnumItemDecl(item))
                 return false;
 
             item.Name = CheckName(item.Name);

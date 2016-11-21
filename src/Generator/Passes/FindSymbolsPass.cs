@@ -6,14 +6,14 @@ namespace CppSharp.Passes
     {
         public FindSymbolsPass()
         {
-            Options.VisitClassBases = false;
-            Options.VisitFunctionParameters = false;
-            Options.VisitFunctionReturnType = false;
-            Options.VisitNamespaceEnums = false;
-            Options.VisitNamespaceTemplates = false;
-            Options.VisitNamespaceTypedefs = false;
-            Options.VisitTemplateArguments = false;
-            Options.VisitClassFields = false;
+            VisitOptions.VisitClassBases = false;
+            VisitOptions.VisitFunctionParameters = false;
+            VisitOptions.VisitFunctionReturnType = false;
+            VisitOptions.VisitNamespaceEnums = false;
+            VisitOptions.VisitNamespaceTemplates = false;
+            VisitOptions.VisitNamespaceTypedefs = false;
+            VisitOptions.VisitTemplateArguments = false;
+            VisitOptions.VisitClassFields = false;
         }
 
         public override bool VisitDeclaration(Declaration decl)
@@ -21,8 +21,7 @@ namespace CppSharp.Passes
             if (!base.VisitDeclaration(decl))
                 return false;
 
-            var options = Driver.Options;
-            if (!options.CheckSymbols || options.IsCLIGenerator)
+            if (!Options.CheckSymbols || Options.IsCLIGenerator)
                 return false;
 
             var mangledDecl = decl as IMangledDecl;
@@ -42,9 +41,9 @@ namespace CppSharp.Passes
         {
             var symbol = mangledDecl.Mangled;
 
-            if (!Driver.Symbols.FindSymbol(ref symbol))
+            if (!Context.Symbols.FindSymbol(ref symbol))
             {
-                Driver.Diagnostics.Warning("Symbol not found: {0}", symbol);
+                Diagnostics.Warning("Symbol not found: {0}", symbol);
                 return false;
             }
 

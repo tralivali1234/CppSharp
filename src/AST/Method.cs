@@ -69,6 +69,13 @@ namespace CppSharp.AST
         ExplicitConversion
     }
 
+    public enum RefQualifier
+    {
+        None,
+        LValue,
+        RValue
+    }
+
     /// <summary>
     /// Represents a C++ record method declaration.
     /// </summary>
@@ -83,10 +90,8 @@ namespace CppSharp.AST
             : base(method)
         {
             Access = method.Access;
-            AccessDecl = method.AccessDecl;
             IsVirtual = method.IsVirtual;
             IsConst = method.IsConst;
-            IsImplicit = method.IsImplicit;
             IsOverride = method.IsOverride;
             IsProxy = method.IsProxy;
             IsStatic = method.IsStatic;
@@ -105,15 +110,14 @@ namespace CppSharp.AST
             
         }
 
-        public AccessSpecifierDecl AccessDecl { get; set; }
-
         public bool IsVirtual { get; set; }
         public bool IsStatic { get; set; }
         public bool IsConst { get; set; }
-        public bool IsImplicit { get; set; }
         public bool IsExplicit { get; set; }
         public bool IsOverride { get; set; }
         public bool IsProxy { get; set; }
+
+        public RefQualifier RefQualifier { get; set; }
 
         private CXXMethodKind kind;
         public CXXMethodKind Kind

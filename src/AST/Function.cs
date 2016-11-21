@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using CppSharp.AST.Extensions;
 
 namespace CppSharp.AST
 {
@@ -74,6 +75,16 @@ namespace CppSharp.AST
         {
             return visitor.VisitParameterDecl(this);
         }
+
+        /// <summary>
+        /// HACK: in many cases QualifiedType.Qualifiers.IsConst does not work.
+        /// It's false in Clang to begin with. I tried fixing it to no avail.
+        /// I don't have any more time at the moment.
+        /// </summary>
+        public bool IsConst
+        {
+            get { return DebugText.StartsWith("const ", System.StringComparison.Ordinal); }
+        }
     }
 
     public class ParameterTypeComparer : IEqualityComparer<Parameter>
@@ -86,7 +97,7 @@ namespace CppSharp.AST
 
         public bool Equals(Parameter x, Parameter y)
         {
-            return x.QualifiedType == y.QualifiedType;
+            return x.QualifiedType.ResolvesTo(y.QualifiedType);
         }
 
         public int GetHashCode(Parameter obj)
@@ -159,6 +170,8 @@ namespace CppSharp.AST
         public CallingConvention CallingConvention { get; set; }
 
         public FunctionTemplateSpecialization SpecializationInfo { get; set; }
+
+        public Function InstantiatedFrom { get; set; }
 
         public bool IsThisCall
         {

@@ -12,9 +12,9 @@ namespace CppSharp
         enum struct ParserResultKind;
         enum struct SourceLocationKind;
         ref class ClangParser;
+        ref class CppParserOptions;
         ref class Parser;
         ref class ParserDiagnostic;
-        ref class ParserOptions;
         ref class ParserResult;
         ref class ParserTargetInfo;
         namespace AST
@@ -34,10 +34,16 @@ namespace CppSharp
         {
             /// <summary> The C programming language. </summary>
             C = 0,
+            /// <summary> The C programming language (GNU version). </summary>
+            GNUC = 1,
             /// <summary> The C++ programming language year 1998; supports deprecated constructs. </summary>
-            CPlusPlus98 = 1,
+            CPlusPlus98 = 2,
+            /// <summary> The C++ programming language year 1998; supports deprecated constructs (GNU version). </summary>
+            GNUPlusPlus98 = 3,
             /// <summary> The C++ programming language year 2011. </summary>
-            CPlusPlus11 = 2
+            CPlusPlus11 = 4,
+            /// <summary> The C++ programming language year 2011 (GNU version). </summary>
+            GNUPlusPlus11 = 5
         };
 
         public enum struct ParserDiagnosticLevel
@@ -65,67 +71,24 @@ namespace CppSharp
             User = 4
         };
 
-        public ref class ParserOptions : ICppInstance
+        public ref class CppParserOptions : ICppInstance
         {
         public:
 
-            property ::CppSharp::CppParser::ParserOptions* NativePtr;
+            property ::CppSharp::CppParser::CppParserOptions* NativePtr;
             property System::IntPtr __Instance
             {
                 virtual System::IntPtr get();
                 virtual void set(System::IntPtr instance);
             }
 
-            ParserOptions(::CppSharp::CppParser::ParserOptions* native);
-            static ParserOptions^ __CreateInstance(::System::IntPtr native);
-            static ParserOptions^ __CreateInstance(::System::IntPtr native, bool __ownsNativeInstance);
-            ParserOptions();
+            CppParserOptions(::CppSharp::CppParser::CppParserOptions* native);
+            static CppParserOptions^ __CreateInstance(::System::IntPtr native);
+            CppParserOptions();
 
-            ParserOptions(CppSharp::Parser::ParserOptions^ _0);
+            CppParserOptions(CppSharp::Parser::CppParserOptions^ _0);
 
-            ~ParserOptions();
-
-            property unsigned int ArgumentsCount
-            {
-                unsigned int get();
-            }
-
-            property System::String^ FileName
-            {
-                System::String^ get();
-                void set(System::String^);
-            }
-
-            property unsigned int IncludeDirsCount
-            {
-                unsigned int get();
-            }
-
-            property unsigned int SystemIncludeDirsCount
-            {
-                unsigned int get();
-            }
-
-            property unsigned int DefinesCount
-            {
-                unsigned int get();
-            }
-
-            property unsigned int UndefinesCount
-            {
-                unsigned int get();
-            }
-
-            property unsigned int LibraryDirsCount
-            {
-                unsigned int get();
-            }
-
-            property System::String^ TargetTriple
-            {
-                System::String^ get();
-                void set(System::String^);
-            }
+            ~CppParserOptions();
 
             property CppSharp::Parser::AST::ASTContext^ ASTContext
             {
@@ -181,41 +144,94 @@ namespace CppSharp
                 void set(CppSharp::Parser::ParserTargetInfo^);
             }
 
-            System::String^ getArguments(unsigned int i);
+            property System::String^ LibraryFile
+            {
+                System::String^ get();
+                void set(System::String^);
+            }
 
-            void addArguments(System::String^ s);
+            property System::String^ TargetTriple
+            {
+                System::String^ get();
+                void set(System::String^);
+            }
 
-            void clearArguments();
+            property unsigned int ArgumentsCount
+            {
+                unsigned int get();
+            }
 
-            System::String^ getIncludeDirs(unsigned int i);
+            property unsigned int SourceFilesCount
+            {
+                unsigned int get();
+            }
 
-            void addIncludeDirs(System::String^ s);
+            property unsigned int IncludeDirsCount
+            {
+                unsigned int get();
+            }
 
-            void clearIncludeDirs();
+            property unsigned int SystemIncludeDirsCount
+            {
+                unsigned int get();
+            }
 
-            System::String^ getSystemIncludeDirs(unsigned int i);
+            property unsigned int DefinesCount
+            {
+                unsigned int get();
+            }
 
-            void addSystemIncludeDirs(System::String^ s);
+            property unsigned int UndefinesCount
+            {
+                unsigned int get();
+            }
 
-            void clearSystemIncludeDirs();
+            property unsigned int LibraryDirsCount
+            {
+                unsigned int get();
+            }
 
-            System::String^ getDefines(unsigned int i);
+            System::String^ GetArguments(unsigned int i);
 
-            void addDefines(System::String^ s);
+            void AddArguments(System::String^ s);
 
-            void clearDefines();
+            void ClearArguments();
 
-            System::String^ getUndefines(unsigned int i);
+            System::String^ GetSourceFiles(unsigned int i);
 
-            void addUndefines(System::String^ s);
+            void AddSourceFiles(System::String^ s);
 
-            void clearUndefines();
+            void ClearSourceFiles();
 
-            System::String^ getLibraryDirs(unsigned int i);
+            System::String^ GetIncludeDirs(unsigned int i);
 
-            void addLibraryDirs(System::String^ s);
+            void AddIncludeDirs(System::String^ s);
 
-            void clearLibraryDirs();
+            void ClearIncludeDirs();
+
+            System::String^ GetSystemIncludeDirs(unsigned int i);
+
+            void AddSystemIncludeDirs(System::String^ s);
+
+            void ClearSystemIncludeDirs();
+
+            System::String^ GetDefines(unsigned int i);
+
+            void AddDefines(System::String^ s);
+
+            void ClearDefines();
+
+            System::String^ GetUndefines(unsigned int i);
+
+            void AddUndefines(System::String^ s);
+
+            void ClearUndefines();
+
+            System::String^ GetLibraryDirs(unsigned int i);
+
+            void AddLibraryDirs(System::String^ s);
+
+            void ClearLibraryDirs();
 
             protected:
             bool __ownsNativeInstance;
@@ -234,24 +250,11 @@ namespace CppSharp
 
             ParserDiagnostic(::CppSharp::CppParser::ParserDiagnostic* native);
             static ParserDiagnostic^ __CreateInstance(::System::IntPtr native);
-            static ParserDiagnostic^ __CreateInstance(::System::IntPtr native, bool __ownsNativeInstance);
             ParserDiagnostic();
 
             ParserDiagnostic(CppSharp::Parser::ParserDiagnostic^ _0);
 
             ~ParserDiagnostic();
-
-            property System::String^ FileName
-            {
-                System::String^ get();
-                void set(System::String^);
-            }
-
-            property System::String^ Message
-            {
-                System::String^ get();
-                void set(System::String^);
-            }
 
             property CppSharp::Parser::ParserDiagnosticLevel Level
             {
@@ -271,6 +274,18 @@ namespace CppSharp
                 void set(int);
             }
 
+            property System::String^ FileName
+            {
+                System::String^ get();
+                void set(System::String^);
+            }
+
+            property System::String^ Message
+            {
+                System::String^ get();
+                void set(System::String^);
+            }
+
             protected:
             bool __ownsNativeInstance;
         };
@@ -288,17 +303,11 @@ namespace CppSharp
 
             ParserResult(::CppSharp::CppParser::ParserResult* native);
             static ParserResult^ __CreateInstance(::System::IntPtr native);
-            static ParserResult^ __CreateInstance(::System::IntPtr native, bool __ownsNativeInstance);
             ParserResult();
 
             ParserResult(CppSharp::Parser::ParserResult^ _0);
 
             ~ParserResult();
-
-            property unsigned int DiagnosticsCount
-            {
-                unsigned int get();
-            }
 
             property CppSharp::Parser::ParserResultKind Kind
             {
@@ -318,11 +327,16 @@ namespace CppSharp
                 void set(CppSharp::Parser::AST::NativeLibrary^);
             }
 
-            CppSharp::Parser::ParserDiagnostic^ getDiagnostics(unsigned int i);
+            property unsigned int DiagnosticsCount
+            {
+                unsigned int get();
+            }
 
-            void addDiagnostics(CppSharp::Parser::ParserDiagnostic^ s);
+            CppSharp::Parser::ParserDiagnostic^ GetDiagnostics(unsigned int i);
 
-            void clearDiagnostics();
+            void AddDiagnostics(CppSharp::Parser::ParserDiagnostic^ s);
+
+            void ClearDiagnostics();
 
             protected:
             bool __ownsNativeInstance;
@@ -341,18 +355,17 @@ namespace CppSharp
 
             ClangParser(::CppSharp::CppParser::ClangParser* native);
             static ClangParser^ __CreateInstance(::System::IntPtr native);
-            static ClangParser^ __CreateInstance(::System::IntPtr native, bool __ownsNativeInstance);
             ClangParser();
 
             ClangParser(CppSharp::Parser::ClangParser^ _0);
 
             ~ClangParser();
 
-            static CppSharp::Parser::ParserResult^ ParseHeader(CppSharp::Parser::ParserOptions^ Opts);
+            static CppSharp::Parser::ParserResult^ ParseHeader(CppSharp::Parser::CppParserOptions^ Opts);
 
-            static CppSharp::Parser::ParserResult^ ParseLibrary(CppSharp::Parser::ParserOptions^ Opts);
+            static CppSharp::Parser::ParserResult^ ParseLibrary(CppSharp::Parser::CppParserOptions^ Opts);
 
-            static CppSharp::Parser::ParserTargetInfo^ GetTargetInfo(CppSharp::Parser::ParserOptions^ Opts);
+            static CppSharp::Parser::ParserTargetInfo^ GetTargetInfo(CppSharp::Parser::CppParserOptions^ Opts);
 
             protected:
             bool __ownsNativeInstance;

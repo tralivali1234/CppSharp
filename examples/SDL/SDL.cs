@@ -1,5 +1,7 @@
 ﻿using CppSharp.AST;
 using CppSharp.Passes;
+using System;
+using System.IO;
 
 namespace CppSharp
 {
@@ -7,20 +9,22 @@ namespace CppSharp
     {
         public void Setup(Driver driver)
         {
+            var parserOptions = driver.ParserOptions;
             var options = driver.Options;
             options.LibraryName = "SDL";
             options.Headers.Add("SDL.h");
-            options.addIncludeDirs("../../../examples/SDL/SDL-2.0/include");
+            var sdlPath = Path.Combine(GetExamplesDirectory("SDL"), "SDL-2.0/include");
+            parserOptions.AddIncludeDirs(sdlPath);
             options.OutputDir = "SDL";
         }
 
         public void SetupPasses(Driver driver)
         {
-            driver.TranslationUnitPasses.RemovePrefix("SDL_");
-            driver.TranslationUnitPasses.RemovePrefix("SCANCODE_");
-            driver.TranslationUnitPasses.RemovePrefix("SDLK_");
-            driver.TranslationUnitPasses.RemovePrefix("KMOD_");
-            driver.TranslationUnitPasses.RemovePrefix("LOG_CATEGORY_");
+            driver.Context.TranslationUnitPasses.RemovePrefix("SDL_");
+            driver.Context.TranslationUnitPasses.RemovePrefix("SCANCODE_");
+            driver.Context.TranslationUnitPasses.RemovePrefix("SDLK_");
+            driver.Context.TranslationUnitPasses.RemovePrefix("KMOD_");
+            driver.Context.TranslationUnitPasses.RemovePrefix("LOG_CATEGORY_");
         }
 
         public void Preprocess(Driver driver, ASTContext ctx)
@@ -62,6 +66,24 @@ namespace CppSharp
             ctx.SetClassBindName("assert_data", "AssertData");
             ctx.SetNameOfEnumWithName("eventaction", "EventAction");
             ctx.SetNameOfEnumWithName("LOG_CATEGORY", "LogCategory");
+        }
+
+        public static string GetExamplesDirectory(string name)
+        {
+            var directory = Directory.GetParent(Directory.GetCurrentDirectory());
+
+            while (directory != null)
+            {
+                var path = Path.Combine(directory.FullName, "examples", name);
+
+                if (Directory.Exists(path))
+                    return path;
+
+                directory = directory.Parent;
+            }
+
+            throw new Exception(string.Format(
+                "Examples directory for project '{0}' was not found", name));
         }
 
         static class Program

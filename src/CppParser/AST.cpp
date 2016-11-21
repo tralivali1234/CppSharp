@@ -6,9 +6,9 @@
 ************************************************************************/
 
 #include "AST.h"
-#include <algorithm>
 #include <string>
 #include <vector>
+#include <llvm/ADT/SmallString.h>
 #include <llvm/Support/Path.h>
 
 // copy from widenPath ('llvm/lib/Support/Windows/Path.inc')
@@ -67,6 +67,9 @@ TagType::TagType() : Type(TypeKind::Tag) {}
 ArrayType::ArrayType() : Type(TypeKind::Array) {}
 
 FunctionType::FunctionType() : Type(TypeKind::Function) {}
+
+FunctionType::~FunctionType() {}
+
 DEF_VECTOR(FunctionType, Parameter*, Parameters)
 
 PointerType::PointerType() : Type(TypeKind::Pointer) {}
@@ -80,40 +83,97 @@ AttributedType::AttributedType() : Type(TypeKind::Attributed) {}
 DecayedType::DecayedType() : Type(TypeKind::Decayed) {}
 
 // Template
-Template::Template(DeclarationKind kind) : Declaration(kind) {}
+TemplateParameter::TemplateParameter(DeclarationKind kind)
+    : Declaration(kind)
+    , Depth(0)
+    , Index(0)
+    , IsParameterPack(false)
+{
+}
 
-TemplateArgument::TemplateArgument() : Declaration(0) {}
+TemplateParameter::~TemplateParameter()
+{
+}
+
+TemplateTemplateParameter::TemplateTemplateParameter()
+    : Template(DeclarationKind::TemplateTemplateParm)
+    , IsParameterPack(false)
+    , IsPackExpansion(false)
+    , IsExpandedParameterPack(false)
+{
+}
+
+TemplateTemplateParameter::~TemplateTemplateParameter()
+{
+}
+
+// TemplateParameter
+TypeTemplateParameter::TypeTemplateParameter()
+    : TemplateParameter(DeclarationKind::TemplateTypeParm)
+{
+}
+
+TypeTemplateParameter::TypeTemplateParameter(const TypeTemplateParameter& rhs)
+    : TemplateParameter(rhs.Kind)
+    , DefaultArgument(rhs.DefaultArgument)
+{
+}
+
+TypeTemplateParameter::~TypeTemplateParameter() {}
+
+NonTypeTemplateParameter::NonTypeTemplateParameter()
+    : TemplateParameter(DeclarationKind::NonTypeTemplateParm)
+    , DefaultArgument(0)
+    , Position(0)
+    , IsPackExpansion(false)
+    , IsExpandedParameterPack(false)
+{
+}
+
+NonTypeTemplateParameter::NonTypeTemplateParameter(const NonTypeTemplateParameter& rhs)
+    : TemplateParameter(rhs.Kind)
+    , DefaultArgument(rhs.DefaultArgument)
+    , Position(rhs.Position)
+    , IsPackExpansion(rhs.IsPackExpansion)
+    , IsExpandedParameterPack(rhs.IsExpandedParameterPack)
+{
+}
+
+NonTypeTemplateParameter::~NonTypeTemplateParameter() {}
+
+TemplateArgument::TemplateArgument() : Declaration(0), Integral(0) {}
 
 TemplateSpecializationType::TemplateSpecializationType()
-    : Type(TypeKind::TemplateSpecialization), Template(0), Desugared(0) {}
+    : Type(TypeKind::TemplateSpecialization), Template(0) {}
+
 TemplateSpecializationType::TemplateSpecializationType(
     const TemplateSpecializationType& rhs) : Type(rhs),
     Arguments(rhs.Arguments), Template(rhs.Template), Desugared(rhs.Desugared) {}
 
+TemplateSpecializationType::~TemplateSpecializationType() {}
+
 DEF_VECTOR(TemplateSpecializationType, TemplateArgument, Arguments)
 
-// TemplateParameter
-TemplateParameter::TemplateParameter() 
-    : IsTypeParameter(false)
-{
-}
+DependentTemplateSpecializationType::DependentTemplateSpecializationType()
+    : Type(TypeKind::DependentTemplateSpecialization) {}
 
-TemplateParameter::TemplateParameter(const TemplateParameter& rhs)
-    : Name(rhs.Name)
-    , IsTypeParameter(rhs.IsTypeParameter)
-{
-}
+DependentTemplateSpecializationType::DependentTemplateSpecializationType(
+    const DependentTemplateSpecializationType& rhs) : Type(rhs),
+    Arguments(rhs.Arguments), Desugared(rhs.Desugared) {}
 
-DEF_STRING(TemplateParameter, Name)
+DependentTemplateSpecializationType::~DependentTemplateSpecializationType() {}
 
-TemplateParameterType::TemplateParameterType() : Type(TypeKind::TemplateParameter) {}
+DEF_VECTOR(DependentTemplateSpecializationType, TemplateArgument, Arguments)
+
+TemplateParameterType::TemplateParameterType() : Type(TypeKind::TemplateParameter), Parameter(0) {}
+
+TemplateParameterType::~TemplateParameterType() {}
 
 TemplateParameterSubstitutionType::TemplateParameterSubstitutionType()
     : Type(TypeKind::TemplateParameterSubstitution) {}
 
 InjectedClassNameType::InjectedClassNameType()
     : Type(TypeKind::InjectedClassName)
-    , TemplateSpecialization(0)
     , Class(0)
 {
 }
@@ -121,6 +181,10 @@ InjectedClassNameType::InjectedClassNameType()
 DependentNameType::DependentNameType() : Type(TypeKind::DependentName) {}
 
 PackExpansionType::PackExpansionType() : Type(TypeKind::PackExpansion) {}
+
+UnaryTransformType::UnaryTransformType() : Type(TypeKind::UnaryTransform) {}
+
+VectorType::VectorType() : Type(TypeKind::Vector), NumElements(0) {}
 
 BuiltinType::BuiltinType() : CppSharp::CppParser::AST::Type(TypeKind::Builtin) {}
 
@@ -138,10 +202,34 @@ VFTableInfo::VFTableInfo(const VFTableInfo& rhs) : VBTableIndex(rhs.VBTableIndex
     VFPtrOffset(rhs.VFPtrOffset), VFPtrFullOffset(rhs.VFPtrFullOffset),
     Layout(rhs.Layout) {}
 
+LayoutField::LayoutField() : Offset(0), FieldPtr(0) {}
+
+LayoutField::LayoutField(const LayoutField & other)
+    : Offset(other.Offset)
+    , Name(other.Name)
+    , QualifiedType(other.QualifiedType)
+    , FieldPtr(other.FieldPtr)
+{
+}
+
+LayoutField::~LayoutField() {}
+
+DEF_STRING(LayoutField, Name)
+
+LayoutBase::LayoutBase() : Offset(0), Class(0) {}
+
+LayoutBase::LayoutBase(const LayoutBase& other) : Offset(other.Offset), Class(other.Class) {}
+
+LayoutBase::~LayoutBase() {}
+
 ClassLayout::ClassLayout() : ABI(CppAbi::Itanium), HasOwnVFPtr(false),
     VBPtrOffset(0), Alignment(0), Size(0), DataSize(0) {}
 
 DEF_VECTOR(ClassLayout, VFTableInfo, VFTables)
+
+DEF_VECTOR(ClassLayout, LayoutField, Fields)
+
+DEF_VECTOR(ClassLayout, LayoutBase, Bases)
 
 Declaration::Declaration(DeclarationKind kind)
     : Kind(kind)
@@ -153,6 +241,7 @@ Declaration::Declaration(DeclarationKind kind)
     , Comment(0)
     , IsIncomplete(false)
     , IsDependent(false)
+    , IsImplicit(false)
     , CompleteDeclaration(0)
     , DefinitionOrder(0)
     , OriginalPtr(0)
@@ -171,6 +260,7 @@ Declaration::Declaration(const Declaration& rhs)
     , DebugText(rhs.DebugText)
     , IsIncomplete(rhs.IsIncomplete)
     , IsDependent(rhs.IsDependent)
+    , IsImplicit(rhs.IsImplicit)
     , CompleteDeclaration(rhs.CompleteDeclaration)
     , DefinitionOrder(rhs.DefinitionOrder)
     , PreprocessedEntities(rhs.PreprocessedEntities)
@@ -183,6 +273,7 @@ Declaration::~Declaration()
 }
 
 DEF_STRING(Declaration, Name)
+DEF_STRING(Declaration, USR)
 DEF_STRING(Declaration, DebugText)
 DEF_VECTOR(Declaration, PreprocessedEntity*, PreprocessedEntities)
 
@@ -197,6 +288,7 @@ DEF_VECTOR(DeclarationContext, Function*, Functions)
 DEF_VECTOR(DeclarationContext, Class*, Classes)
 DEF_VECTOR(DeclarationContext, Template*, Templates)
 DEF_VECTOR(DeclarationContext, TypedefDecl*, Typedefs)
+DEF_VECTOR(DeclarationContext, TypeAlias*, TypeAliases)
 DEF_VECTOR(DeclarationContext, Variable*, Variables)
 DEF_VECTOR(DeclarationContext, Friend*, Friends)
 
@@ -251,7 +343,7 @@ Namespace* DeclarationContext::FindCreateNamespace(const std::string& Name)
     return _namespace;
 }
 
-Class* DeclarationContext::FindClass(const std::string& Name)
+Class* DeclarationContext::FindClass(const std::string& Name, bool IsComplete)
 {
     if (Name.empty()) return nullptr;
 
@@ -260,7 +352,8 @@ Class* DeclarationContext::FindClass(const std::string& Name)
     if (entries.size() == 1)
     {
         auto _class = std::find_if(Classes.begin(), Classes.end(),
-            [&](Class* klass) { return klass->Name == Name; });
+            [&](Class* klass) { return klass->Name == Name &&
+                (!klass->IsIncomplete || !IsComplete); });
 
         return _class != Classes.end() ? *_class : nullptr;
     }
@@ -274,7 +367,7 @@ Class* DeclarationContext::FindClass(const std::string& Name)
     if (!_namespace)
         return nullptr;
 
-    return _namespace->FindClass(className);
+    return _namespace->FindClass(className, IsComplete);
 }
 
 Class* DeclarationContext::CreateClass(std::string Name, bool IsComplete)
@@ -290,7 +383,7 @@ Class* DeclarationContext::CreateClass(std::string Name, bool IsComplete)
 Class* DeclarationContext::FindClass(const std::string& Name, bool IsComplete,
         bool Create)
 {
-    auto _class = FindClass(Name);
+    auto _class = FindClass(Name, IsComplete);
 
     if (!_class)
     {
@@ -303,27 +396,10 @@ Class* DeclarationContext::FindClass(const std::string& Name, bool IsComplete,
         return _class;
     }
 
-    if (_class->IsIncomplete == !IsComplete)
-        return _class;
-
-    if (!Create)
-        return nullptr;
-
-    auto newClass = CreateClass(Name, IsComplete);
-
-    // Replace the incomplete declaration with the complete one.
-    if (_class->IsIncomplete)
-    {
-        _class->CompleteDeclaration = newClass;
-
-        std::replace_if(Classes.begin(), Classes.end(),
-            [&](Class* klass) { return klass == _class; }, newClass);
-    }
-
-    return newClass;
+    return _class;
 }
 
-Enumeration* DeclarationContext::FindEnum(void* OriginalPtr)
+Enumeration* DeclarationContext::FindEnum(const void* OriginalPtr)
 {
     auto foundEnum = std::find_if(Enums.begin(), Enums.end(),
         [&](Enumeration* enumeration) { return enumeration->OriginalPtr == OriginalPtr; });
@@ -398,35 +474,10 @@ Function* DeclarationContext::FindFunction(const std::string& USR)
         return *foundFunction;
 
     auto foundTemplate = std::find_if(Templates.begin(), Templates.end(),
-        [&](Template* t) { return t->TemplatedDecl->USR == USR; });
+        [&](Template* t) { return t->TemplatedDecl && t->TemplatedDecl->USR == USR; });
 
     if (foundTemplate != Templates.end())
         return static_cast<Function*>((*foundTemplate)->TemplatedDecl);
-
-    return nullptr;
-}
-
-ClassTemplate*
-DeclarationContext::FindClassTemplate(const std::string& USR)
-{
-    auto foundTemplate = std::find_if(Templates.begin(), Templates.end(),
-        [&](Template* t) { return t->USR == USR; });
-
-    if (foundTemplate != Templates.end())
-        return static_cast<ClassTemplate*>(*foundTemplate);
-
-    return nullptr;
-}
-
-FunctionTemplate*
-DeclarationContext::FindFunctionTemplate(const std::string& USR)
-{
-    auto foundTemplate = std::find_if(Templates.begin(), Templates.end(),
-        [&](Template* t) { return t->USR == USR; }
-    );
-
-    if (foundTemplate != Templates.end())
-        return static_cast<FunctionTemplate*>(*foundTemplate);
 
     return nullptr;
 }
@@ -445,9 +496,26 @@ TypedefDecl* DeclarationContext::FindTypedef(const std::string& Name, bool Creat
     auto tdef = new TypedefDecl();
     tdef->Name = Name;
     tdef->_Namespace = this;
-    Typedefs.push_back(tdef);
 
     return tdef;
+}
+
+TypeAlias* DeclarationContext::FindTypeAlias(const std::string& Name, bool Create)
+{
+    auto foundTypeAlias = std::find_if(TypeAliases.begin(), TypeAliases.end(),
+        [&](TypeAlias* talias) { return talias->Name == Name; });
+
+    if (foundTypeAlias != TypeAliases.end())
+        return *foundTypeAlias;
+
+    if (!Create)
+        return nullptr;
+
+    auto talias = new TypeAlias();
+    talias->Name = Name;
+    talias->_Namespace = this;
+
+    return talias;
 }
 
 Variable* DeclarationContext::FindVariable(const std::string& USR)
@@ -472,9 +540,21 @@ Friend* DeclarationContext::FindFriend(const std::string& USR)
     return nullptr;
 }
 
-TypedefDecl::TypedefDecl() : Declaration(DeclarationKind::Typedef) {}
+TypedefNameDecl::TypedefNameDecl(DeclarationKind Kind) : Declaration(Kind) {}
+
+TypedefNameDecl::~TypedefNameDecl() {}
+
+TypedefDecl::TypedefDecl() : TypedefNameDecl(DeclarationKind::Typedef) {}
+
+TypedefDecl::~TypedefDecl() {}
+
+TypeAlias::TypeAlias() : TypedefNameDecl(DeclarationKind::TypeAlias), DescribedAliasTemplate(0) {}
+
+TypeAlias::~TypeAlias() {}
 
 Friend::Friend() : CppSharp::CppParser::AST::Declaration(DeclarationKind::Friend), Declaration(0) {}
+
+Friend::~Friend() {}
 
 DEF_STRING(Statement, String)
 
@@ -486,15 +566,33 @@ Expression::Expression(const std::string& str, StatementClass stmtClass, Declara
 BinaryOperator::BinaryOperator(const std::string& str, Expression* lhs, Expression* rhs, const std::string& opcodeStr)
     : Expression(str, StatementClass::BinaryOperator), LHS(lhs), RHS(rhs), OpcodeStr(opcodeStr) {}
 
+BinaryOperator::~BinaryOperator()
+{
+    delete LHS;
+    delete RHS;
+}
+
 DEF_STRING(BinaryOperator, OpcodeStr)
 
 CallExpr::CallExpr(const std::string& str, Declaration* decl)
     : Expression(str, StatementClass::CallExprClass, decl) {}
 
+CallExpr::~CallExpr()
+{
+    for (auto& arg : Arguments)
+        delete arg;
+}
+
 DEF_VECTOR(CallExpr, Expression*, Arguments)
 
 CXXConstructExpr::CXXConstructExpr(const std::string& str, Declaration* decl)
     : Expression(str, StatementClass::CXXConstructExprClass, decl) {}
+
+CXXConstructExpr::~CXXConstructExpr()
+{
+    for (auto& arg : Arguments)
+        delete arg;
+}
 
 DEF_VECTOR(CXXConstructExpr, Expression*, Arguments)
 
@@ -504,15 +602,35 @@ Parameter::Parameter() : Declaration(DeclarationKind::Parameter),
 Parameter::~Parameter()
 {
     if (DefaultArgument)
-        delete DefaultArgument;
+    {
+        // HACK: see https://github.com/mono/CppSharp/issues/598
+        switch (DefaultArgument->Class)
+        {
+        case StatementClass::BinaryOperator:
+            delete static_cast<BinaryOperator*>(DefaultArgument);
+            break;
+        case StatementClass::CallExprClass:
+            delete static_cast<CallExpr*>(DefaultArgument);
+            break;
+        case StatementClass::CXXConstructExprClass:
+            delete static_cast<CXXConstructExpr*>(DefaultArgument);
+            break;
+        default:
+            delete DefaultArgument;
+            break;
+        }
+    }
 }
 
 Function::Function() 
     : Declaration(DeclarationKind::Function)
     , IsReturnIndirect(false)
     , SpecializationInfo(0)
+    , InstantiatedFrom(0)
 {
 }
+
+Function::~Function() {}
 
 DEF_STRING(Function, Mangled)
 DEF_STRING(Function, Signature)
@@ -520,44 +638,51 @@ DEF_VECTOR(Function, Parameter*, Parameters)
 
 Method::Method() 
     : Function()
-    , AccessDecl(0)
     , IsVirtual(false)
     , IsStatic(false)
     , IsConst(false)
-    , IsImplicit(false)
     , IsExplicit(false)
     , IsOverride(false)
     , IsDefaultConstructor(false)
     , IsCopyConstructor(false)
     , IsMoveConstructor(false)
+    , RefQualifier(RefQualifierKind::None)
 { 
     Kind = DeclarationKind::Method; 
 }
+
+Method::~Method() {}
 
 // Enumeration
 
 Enumeration::Enumeration() : DeclarationContext(DeclarationKind::Enumeration),
     Modifiers((EnumModifiers)0), Type(0), BuiltinType(0) {}
 
-DEF_VECTOR(Enumeration, Enumeration::Item, Items)
+Enumeration::~Enumeration() {}
+
+DEF_VECTOR(Enumeration, Enumeration::Item*, Items)
 
 Enumeration::Item::Item() : Declaration(DeclarationKind::EnumerationItem) {}
 
 Enumeration::Item::Item(const Item& rhs) : Declaration(rhs),
     Expression(rhs.Expression), Value(rhs.Value) {}
 
+Enumeration::Item::~Item() {}
+
 DEF_STRING(Enumeration::Item, Expression)
 
 Enumeration::Item* Enumeration::FindItemByName(const std::string& Name)
 {
     auto foundEnumItem = std::find_if(Items.begin(), Items.end(),
-        [&](Item _item) { return _item.Name == Name; });
+        [&](Item* _item) { return _item->Name == Name; });
     if (foundEnumItem != Items.end())
-        return &*foundEnumItem;
+        return *foundEnumItem;
     return nullptr;
 }
 
 Variable::Variable() : Declaration(DeclarationKind::Variable) {}
+
+Variable::~Variable() {}
 
 DEF_STRING(Variable, Mangled)
 
@@ -566,8 +691,12 @@ BaseClassSpecifier::BaseClassSpecifier() : Type(0), Offset(0) {}
 Field::Field() : Declaration(DeclarationKind::Field), Class(0),
     IsBitField(false), BitWidth(0) {}
 
+Field::~Field() {}
+
 AccessSpecifierDecl::AccessSpecifierDecl()
     : Declaration(DeclarationKind::AccessSpecifier) {}
+
+AccessSpecifierDecl::~AccessSpecifierDecl() {}
 
 Class::Class()
     : DeclarationContext(DeclarationKind::Class)
@@ -598,9 +727,17 @@ DEF_VECTOR(Class, AccessSpecifierDecl*, Specifiers)
 Template::Template() : Declaration(DeclarationKind::Template),
     TemplatedDecl(0) {}
 
-DEF_VECTOR(Template, TemplateParameter, Parameters)
+Template::Template(DeclarationKind kind) : Declaration(kind), TemplatedDecl(0) {}
+
+DEF_VECTOR(Template, Declaration*, Parameters)
+
+TypeAliasTemplate::TypeAliasTemplate() : Template(DeclarationKind::TypeAliasTemplate) {}
+
+TypeAliasTemplate::~TypeAliasTemplate() {}
 
 ClassTemplate::ClassTemplate() : Template(DeclarationKind::ClassTemplate) {}
+
+ClassTemplate::~ClassTemplate() {}
 
 DEF_VECTOR(ClassTemplate, ClassTemplateSpecialization*, Specializations)
 
@@ -611,6 +748,8 @@ ClassTemplateSpecialization::ClassTemplateSpecialization()
     Kind = DeclarationKind::ClassTemplateSpecialization; 
 }
 
+ClassTemplateSpecialization::~ClassTemplateSpecialization() {}
+
 DEF_VECTOR(ClassTemplateSpecialization, TemplateArgument, Arguments)
 
 ClassTemplatePartialSpecialization::ClassTemplatePartialSpecialization()
@@ -619,7 +758,11 @@ ClassTemplatePartialSpecialization::ClassTemplatePartialSpecialization()
     Kind = DeclarationKind::ClassTemplatePartialSpecialization; 
 }
 
+ClassTemplatePartialSpecialization::~ClassTemplatePartialSpecialization() {}
+
 FunctionTemplate::FunctionTemplate() : Template(DeclarationKind::FunctionTemplate) {}
+
+FunctionTemplate::~FunctionTemplate() {}
 
 DEF_VECTOR(FunctionTemplate, FunctionTemplateSpecialization*, Specializations)
 
@@ -640,7 +783,57 @@ FunctionTemplateSpecialization::FunctionTemplateSpecialization()
 {
 }
 
+FunctionTemplateSpecialization::~FunctionTemplateSpecialization()
+{
+}
+
 DEF_VECTOR(FunctionTemplateSpecialization, TemplateArgument, Arguments)
+
+VarTemplate::VarTemplate() : Template(DeclarationKind::VarTemplate) {}
+
+VarTemplate::~VarTemplate() {}
+
+DEF_VECTOR(VarTemplate, VarTemplateSpecialization*, Specializations)
+
+VarTemplateSpecialization* VarTemplate::FindSpecialization(const std::string& usr)
+{
+    auto foundSpec = std::find_if(Specializations.begin(), Specializations.end(),
+        [&](VarTemplateSpecialization* cts) { return cts->USR == usr; });
+
+    if (foundSpec != Specializations.end())
+        return static_cast<VarTemplateSpecialization*>(*foundSpec);
+
+    return nullptr;
+}
+
+VarTemplatePartialSpecialization* VarTemplate::FindPartialSpecialization(const std::string& usr)
+{
+    auto foundSpec = FindSpecialization(usr);
+    if (foundSpec != nullptr)
+        return static_cast<VarTemplatePartialSpecialization*>(foundSpec);
+    return nullptr;
+}
+
+VarTemplateSpecialization::VarTemplateSpecialization()
+    : Variable()
+    , TemplatedDecl(0)
+{
+    Kind = DeclarationKind::VarTemplateSpecialization;
+}
+
+VarTemplateSpecialization::~VarTemplateSpecialization() {}
+
+DEF_VECTOR(VarTemplateSpecialization, TemplateArgument, Arguments)
+
+VarTemplatePartialSpecialization::VarTemplatePartialSpecialization()
+    : VarTemplateSpecialization()
+{
+    Kind = DeclarationKind::VarTemplatePartialSpecialization;
+}
+
+VarTemplatePartialSpecialization::~VarTemplatePartialSpecialization()
+{
+}
 
 Namespace::Namespace() 
     : DeclarationContext(DeclarationKind::Namespace)
@@ -648,25 +841,40 @@ Namespace::Namespace()
 {
 }
 
+Namespace::~Namespace() {}
+
 PreprocessedEntity::PreprocessedEntity()
-    : Declaration(DeclarationKind::PreprocessedEntity),
-      MacroLocation(AST::MacroLocation::Unknown) {}
+    : MacroLocation(AST::MacroLocation::Unknown),
+      OriginalPtr(0), Kind(DeclarationKind::PreprocessedEntity) {}
 
-MacroDefinition::MacroDefinition() { Kind = DeclarationKind::MacroDefinition; }
+MacroDefinition::MacroDefinition()
+    : LineNumberStart(0), LineNumberEnd(0) { Kind = DeclarationKind::MacroDefinition; }
 
+MacroDefinition::~MacroDefinition() {}
+
+DEF_STRING(MacroDefinition, Name)
 DEF_STRING(MacroDefinition, Expression)
 
-MacroExpansion::MacroExpansion() { Kind = DeclarationKind::MacroExpansion; }
+MacroExpansion::MacroExpansion() : Definition(0) { Kind = DeclarationKind::MacroExpansion; }
 
+MacroExpansion::~MacroExpansion() {}
+
+DEF_STRING(MacroExpansion, Name)
 DEF_STRING(MacroExpansion, Text)
 
 TranslationUnit::TranslationUnit() { Kind = DeclarationKind::TranslationUnit; }
+
+TranslationUnit::~TranslationUnit() {}
 
 DEF_STRING(TranslationUnit, FileName)
 DEF_VECTOR(TranslationUnit, MacroDefinition*, Macros)
 
 NativeLibrary::NativeLibrary()
     : ArchType(AST::ArchType::UnknownArch)
+{
+}
+
+NativeLibrary::~NativeLibrary()
 {
 }
 
@@ -699,6 +907,8 @@ ClassTemplatePartialSpecialization* ClassTemplate::FindPartialSpecialization(con
 
 ASTContext::ASTContext() {}
 
+ASTContext::~ASTContext() {}
+
 TranslationUnit* ASTContext::FindOrCreateModule(std::string File)
 {
     auto normalizedFile = normalizePath(File);
@@ -726,7 +936,45 @@ DEF_STRING(RawComment, BriefText)
 
 RawComment::RawComment() : FullCommentBlock(0) {}
 
+RawComment::~RawComment()
+{
+    if (FullCommentBlock)
+        delete FullCommentBlock;
+}
+
 FullComment::FullComment() : Comment(CommentKind::FullComment) {}
+
+FullComment::~FullComment()
+{
+    for (auto& block : Blocks)
+    {
+        // HACK: see https://github.com/mono/CppSharp/issues/599
+        switch (block->Kind)
+        {
+        case CommentKind::BlockCommandComment:
+            delete static_cast<BlockCommandComment*>(block);
+            break;
+        case CommentKind::ParamCommandComment:
+            delete static_cast<ParamCommandComment*>(block);
+            break;
+        case CommentKind::TParamCommandComment:
+            delete static_cast<TParamCommandComment*>(block);
+            break;
+        case CommentKind::VerbatimBlockComment:
+            delete static_cast<VerbatimBlockComment*>(block);
+            break;
+        case CommentKind::VerbatimLineComment:
+            delete static_cast<VerbatimLineComment*>(block);
+            break;
+        case CommentKind::ParagraphComment:
+            delete static_cast<ParagraphComment*>(block);
+            break;
+        default:
+            delete block;
+            break;
+        }
+    }
+}
 
 DEF_VECTOR(FullComment, BlockContentComment*, Blocks)
 
@@ -736,11 +984,18 @@ BlockContentComment::BlockContentComment(CommentKind Kind) : Comment(Kind) {}
 
 BlockCommandComment::Argument::Argument() {}
 
+BlockCommandComment::Argument::Argument(const Argument& rhs) : Text(rhs.Text) {}
+
 DEF_STRING(BlockCommandComment::Argument, Text)
 
-BlockCommandComment::BlockCommandComment() : BlockContentComment(CommentKind::BlockCommandComment), CommandId(0) {}
+BlockCommandComment::BlockCommandComment() : BlockContentComment(CommentKind::BlockCommandComment), CommandId(0), ParagraphComment(0) {}
 
-BlockCommandComment::BlockCommandComment(CommentKind Kind) : BlockContentComment(Kind) {}
+BlockCommandComment::BlockCommandComment(CommentKind Kind) : BlockContentComment(Kind), CommandId(0), ParagraphComment(0) {}
+
+BlockCommandComment::~BlockCommandComment()
+{
+    delete ParagraphComment;
+}
 
 DEF_VECTOR(BlockCommandComment, BlockCommandComment::Argument, Arguments)
 
@@ -752,6 +1007,12 @@ DEF_VECTOR(TParamCommandComment, unsigned, Position)
 
 VerbatimBlockComment::VerbatimBlockComment() : BlockCommandComment(CommentKind::VerbatimBlockComment) {}
 
+VerbatimBlockComment::~VerbatimBlockComment()
+{
+    for (auto& line : Lines)
+        delete line;
+}
+
 DEF_VECTOR(VerbatimBlockComment, VerbatimBlockLineComment*, Lines)
 
 VerbatimLineComment::VerbatimLineComment() : BlockCommandComment(CommentKind::VerbatimLineComment) {}
@@ -760,6 +1021,35 @@ DEF_STRING(VerbatimLineComment, Text)
 
 ParagraphComment::ParagraphComment() : BlockContentComment(CommentKind::ParagraphComment), IsWhitespace(false) {}
 
+ParagraphComment::~ParagraphComment()
+{
+    for (auto& content : Content)
+    {
+        // HACK: see https://github.com/mono/CppSharp/issues/599
+        switch (content->Kind)
+        {
+        case CommentKind::InlineCommandComment:
+            delete static_cast<InlineCommandComment*>(content);
+            break;
+        case CommentKind::HTMLTagComment:
+            delete static_cast<HTMLTagComment*>(content);
+            break;
+        case CommentKind::HTMLStartTagComment:
+            delete static_cast<HTMLStartTagComment*>(content);
+            break;
+        case CommentKind::HTMLEndTagComment:
+            delete static_cast<HTMLEndTagComment*>(content);
+            break;
+        case CommentKind::TextComment:
+            delete static_cast<TextComment*>(content);
+            break;
+        default:
+            delete content;
+            break;
+        }
+    }
+}
+
 DEF_VECTOR(ParagraphComment, InlineContentComment*, Content)
 
 HTMLTagComment::HTMLTagComment() : InlineContentComment(CommentKind::HTMLTagComment) {}
@@ -767,6 +1057,8 @@ HTMLTagComment::HTMLTagComment() : InlineContentComment(CommentKind::HTMLTagComm
 HTMLTagComment::HTMLTagComment(CommentKind Kind) : InlineContentComment(Kind) {}
 
 HTMLStartTagComment::Attribute::Attribute() {}
+
+HTMLStartTagComment::Attribute::Attribute(const Attribute& rhs) : Name(rhs.Name), Value(rhs.Value) {}
 
 DEF_STRING(HTMLStartTagComment::Attribute, Name)
 
@@ -782,9 +1074,9 @@ HTMLEndTagComment::HTMLEndTagComment() : HTMLTagComment(CommentKind::HTMLEndTagC
 
 DEF_STRING(HTMLEndTagComment, TagName)
 
-InlineContentComment::InlineContentComment() : Comment(CommentKind::InlineContentComment) {}
+InlineContentComment::InlineContentComment() : Comment(CommentKind::InlineContentComment), HasTrailingNewline(false) {}
 
-InlineContentComment::InlineContentComment(CommentKind Kind) : Comment(Kind) {}
+InlineContentComment::InlineContentComment(CommentKind Kind) : Comment(Kind), HasTrailingNewline(false) {}
 
 TextComment::TextComment() : InlineContentComment(CommentKind::TextComment) {}
 
@@ -792,9 +1084,12 @@ DEF_STRING(TextComment, Text)
 
 InlineCommandComment::Argument::Argument() {}
 
+InlineCommandComment::Argument::Argument(const Argument& rhs) : Text(rhs.Text) {}
+
 DEF_STRING(InlineCommandComment::Argument, Text)
 
-InlineCommandComment::InlineCommandComment() : InlineContentComment(CommentKind::InlineCommandComment), CommentRenderKind(RenderNormal) {}
+InlineCommandComment::InlineCommandComment()
+    : InlineContentComment(CommentKind::InlineCommandComment), CommandId(0), CommentRenderKind(RenderNormal) {}
 
 DEF_VECTOR(InlineCommandComment, InlineCommandComment::Argument, Arguments)
 

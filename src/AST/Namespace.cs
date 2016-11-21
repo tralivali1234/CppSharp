@@ -39,9 +39,9 @@ namespace CppSharp.AST
             get { return new DeclIterator<Template>(Declarations); }
         }
 
-        public DeclIterator<TypedefDecl> Typedefs
+        public DeclIterator<TypedefNameDecl> Typedefs
         {
-            get { return new DeclIterator<TypedefDecl>(Declarations); }
+            get { return new DeclIterator<TypedefNameDecl>(Declarations); }
         }
 
         public DeclIterator<Variable> Variables
@@ -341,10 +341,13 @@ namespace CppSharp.AST
                 .FirstOrDefault(t => t.USR == usr);
         }
 
-        public ClassTemplate FindClassTemplate(string name)
+        public IEnumerable<ClassTemplate> FindClassTemplate(string name)
         {
-            return Templates.OfType<ClassTemplate>()
-                .FirstOrDefault(t => t.Name == name);
+            foreach (var template in Templates.OfType<ClassTemplate>().Where(t => t.Name == name))
+                yield return template;
+            foreach (var @namespace in Namespaces)
+                foreach (var template in @namespace.FindClassTemplate(name))
+                    yield return template;
         }
 
         public ClassTemplate FindClassTemplateByUSR(string usr)
@@ -353,7 +356,7 @@ namespace CppSharp.AST
                 .FirstOrDefault(t => t.USR == usr);
         }
 
-        public TypedefDecl FindTypedef(string name, bool createDecl = false)
+        public TypedefNameDecl FindTypedef(string name, bool createDecl = false)
         {
             var entries = name.Split(new string[] { "::" },
                 StringSplitOptions.RemoveEmptyEntries).ToList();
@@ -364,7 +367,7 @@ namespace CppSharp.AST
 
                 if (typeDef == null && createDecl)
                 {
-                    typeDef = new TypedefDecl() { Name = name, Namespace = this };
+                    typeDef = new TypedefDecl { Name = name, Namespace = this };
                     Typedefs.Add(typeDef);
                 }
 
@@ -419,7 +422,8 @@ namespace CppSharp.AST
             {
                 Func<Declaration, bool> pred = (t => t.IsGenerated);
                 return Enums.Exists(pred) || HasFunctions || Typedefs.Exists(pred)
-                    || Classes.Any() || Namespaces.Exists(n => n.HasDeclarations);
+                    || Classes.Any() || Namespaces.Exists(n => n.HasDeclarations) ||
+                    Templates.Any(pred);
             }
         }
 

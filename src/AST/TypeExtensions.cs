@@ -120,20 +120,44 @@
         {
             t = t.Desugar();
 
-            var tag = t as TagType;
-            if (tag != null)
-            {
-                decl = tag.Declaration as T;
-                return decl != null;
-            }
-
+            TagType tagType = null;
             var type = t as TemplateSpecializationType;
             if (type != null)
             {
-                var templatedClass = ((ClassTemplate)type.Template).TemplatedClass;
-                decl = templatedClass.CompleteDeclaration == null
-                    ? templatedClass as T
-                    : (T) templatedClass.CompleteDeclaration;
+                if (type.IsDependent)
+                {
+                    if (type.Template is TypeAliasTemplate)
+                    {
+                        Class @class;
+                        type.Desugared.Type.TryGetClass(out @class);
+                        decl = @class as T;
+                        return decl != null;
+                    }
+
+                    var classTemplate = type.Template as ClassTemplate;
+                    if (classTemplate != null)
+                    {
+                        var templatedClass = classTemplate.TemplatedClass;
+                        decl = templatedClass.CompleteDeclaration == null
+                            ? templatedClass as T
+                            : (T) templatedClass.CompleteDeclaration;
+                        return decl != null;
+                    }
+
+                    var templateTemplateParameter = type.Template as TemplateTemplateParameter;
+                    if (templateTemplateParameter != null)
+                        return (decl = templateTemplateParameter.TemplatedDecl as T) != null;
+                }
+                tagType = (type.Desugared.Type.GetFinalPointee() ?? type.Desugared.Type) as TagType;
+            }
+            else
+            {
+                tagType = t as TagType;
+            }
+
+            if (tagType != null)
+            {
+                decl = tagType.Declaration as T;
                 return decl != null;
             }
 
@@ -234,6 +258,39 @@
             return finalPointee;
         }
 
+        /// <summary>
+        /// If t is a pointer type the type pointed to by t will be returned.
+        /// Otherwise the default qualified type.
+        /// </summary>
+        public static QualifiedType GetQualifiedPointee(this Type t)
+        {
+            var ptr = t as PointerType;
+            if (ptr != null)
+                return ptr.QualifiedPointee;
+            var memberPtr = t as MemberPointerType;
+            if (memberPtr != null)
+                return memberPtr.QualifiedPointee;
+            return new QualifiedType();
+        }
+
+        /// <summary>
+        /// If t is a pointer type the type pointed to by t will be returned
+        /// after fully dereferencing it. Otherwise the default qualified type.
+        /// For example int** -> int.
+        /// </summary>
+        public static QualifiedType GetFinalQualifiedPointee(this Type t)
+        {
+            var finalPointee = t.GetQualifiedPointee();
+            var pointee = finalPointee;
+            while (pointee.Type != null)
+            {
+                pointee = pointee.Type.GetQualifiedPointee();
+                if (pointee.Type != null)
+                    finalPointee = pointee;
+            }
+            return finalPointee;
+        }
+
         public static PointerType GetFinalPointer(this Type t)
         {
             var type = t as PointerType;
@@ -247,6 +304,23 @@
                 return pointee.GetFinalPointer();
 
             return type;
+        }
+
+        public static bool ResolvesTo(this QualifiedType type, QualifiedType other)
+        {
+            if (!type.Qualifiers.Equals(other.Qualifiers))
+                return false;
+
+            var left = type.Type.Desugar();
+            var right = other.Type.Desugar();
+            var leftPointer = left as PointerType;
+            var rightPointer = right as PointerType;
+            if (leftPointer != null && rightPointer != null)
+            {
+                return leftPointer.Modifier == rightPointer.Modifier &&
+                    leftPointer.QualifiedPointee.ResolvesTo(rightPointer.QualifiedPointee);
+            }
+            return left.Equals(right);
         }
     }
 }

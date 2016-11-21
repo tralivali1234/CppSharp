@@ -9,6 +9,13 @@ function cat(file)
   return output
 end
 
+function outputof(cmd, quiet)
+    local file = assert(io.popen(cmd .. " 2>&1", "r"))
+    local output = file:read('*all')
+    file:close()
+    return output
+end
+
 function execute(cmd, quiet)
   print(cmd)
   if not quiet then
@@ -17,8 +24,18 @@ function execute(cmd, quiet)
     local file = assert(io.popen(cmd .. " 2>&1", "r"))
     local output = file:read('*all')
     file:close()
-    return output
+    -- FIXME: Lua 5.2 returns the process exit code from close()
+    -- Update this once Premake upgrades from Lua 5.1
+    return 0
   end
+end
+
+function execute_or_die(cmd, quiet)
+  local res = execute(cmd, quiet)
+  if res > 0 then
+    error("Error executing shell command, aborting...")
+  end
+  return res
 end
 
 function sudo(cmd)
@@ -39,35 +56,35 @@ function git.clone(dir, url, target)
   if target ~= nil then
     cmd = cmd .. " " .. target
   end
-  return execute(cmd)
+  return execute_or_die(cmd)
 end
 
 function git.pull_rebase(dir)
   local cmd = "git -C " .. path.translate(dir, sep) .. " pull --rebase"
-  return execute(cmd)
+  return execute_or_die(cmd)
 end
 
 function git.reset_hard(dir, rev)
   local cmd = "git -C " .. path.translate(dir, sep) .. " reset --hard " .. rev
-  return execute(cmd)
+  return execute_or_die(cmd)
 end
 
 function git.checkout(dir, rev)
   local cmd = "git -C " .. path.translate(dir, sep) .. " checkout " .. rev
-  return execute(cmd)
+  return execute_or_die(cmd)
 end
 
 function git.rev_parse(dir, rev)
   local cmd = "git -C " .. path.translate(dir, sep) .. " rev-parse " .. rev
-  return os.outputof(cmd)
+  return outputof(cmd)
 end
 
 function http.progress (total, curr)
   local ratio = curr / total;
-  ratio = math.floor(math.min(math.max(ratio, 0), 1));
+  ratio = math.min(math.max(ratio, 0), 1);
 
-  local percent = ratio * 100;
-  print("Download progress (" .. percent .. "%/100%)")
+  local percent = math.floor(ratio * 100);
+  io.write("Download progress (" .. percent .. "%/100%)\r")
 end
 
 function download(url, file)
@@ -149,7 +166,7 @@ end
 function os.rmfiles(src_dir, filter)
   filter = filter or "**"
   src_dir = src_dir .. "/"
-  print('rm "' .. path.getabsolute(src_dir) .. filter)
+  print('rm ' .. path.getabsolute(src_dir) .. " " .. filter)
   if not os.isdir(src_dir) then error(src_dir .. " is not an existing directory!") end
   local dir = path.rebase(".",path.getabsolute("."), src_dir) -- root dir, relative from src_dir
  

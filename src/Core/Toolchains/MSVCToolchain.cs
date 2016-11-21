@@ -4,8 +4,6 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using CppSharp.Parser;
-using CppSharp.Parser.AST;
 using Microsoft.Win32;
 
 namespace CppSharp
@@ -13,10 +11,10 @@ namespace CppSharp
     /// Represents a Visual Studio version.
     public enum VisualStudioVersion
     {
-        VS2012,
-        VS2013,
-        VS2015,
-        Latest
+        VS2012 = 11,
+        VS2013 = 12,
+        VS2015 = 14,
+        Latest,
     }
 
     /// Represents a toolchain with associated version and directory.
@@ -118,50 +116,130 @@ namespace CppSharp
             }
         }
 
-        /// Gets the system include folders for the given Visual Studio version.
-        public static List<string> GetSystemIncludes(VisualStudioVersion vsVersion)
+        public static ToolchainVersion GetVSToolchain(VisualStudioVersion vsVersion)
         {
-            var includes = new List<string>();
-
             List<ToolchainVersion> vsSdks;
             GetVisualStudioSdks(out vsSdks);
 
             if (vsSdks.Count == 0)
                 throw new Exception("Could not find a valid Visual Studio toolchain");
 
-            // Clang cannot deal yet with VS 2015, so remove it from SDKs.
-            if (vsVersion == VisualStudioVersion.Latest)
-                vsSdks.Remove(vsSdks.Find(version =>
-                    (int) version.Version == GetVisualStudioVersion(vsVersion)));
-
             var vsSdk = (vsVersion == VisualStudioVersion.Latest)
                 ? vsSdks.Last()
                 : vsSdks.Find(version =>
                     (int)version.Version == GetVisualStudioVersion(vsVersion));
 
+            return vsSdk;
+        }
+
+        public static ToolchainVersion GetWindowsKitsToolchain(VisualStudioVersion vsVersion,
+            out int windowsSdkMajorVer)
+        {
+            var vsSdk = GetVSToolchain(vsVersion);
+
             var vsDir = vsSdk.Directory;
             vsDir = vsDir.Substring(0, vsDir.LastIndexOf(@"\Common7\IDE",
                 StringComparison.Ordinal));
-
-            includes.Add(Path.Combine(vsDir, @"VC\include"));
 
             // Check VCVarsQueryRegistry.bat to see which Windows SDK version
             // is supposed to be used with this VS version.
             var vcVarsPath = Path.Combine(vsDir, @"Common7\Tools\VCVarsQueryRegistry.bat");
 
-            int windowsSdkMajorVer = 0;
+            windowsSdkMajorVer = 0;
             string kitsRootKey = string.Empty;
-            if (File.Exists(vcVarsPath))
-            {
-                var vcVarsFile = File.ReadAllText(vcVarsPath);
-                var match = Regex.Match(vcVarsFile, @"Windows\\v([1-9][0-9]*)\.?([0-9]*)");
-                if (match.Success)
-                    windowsSdkMajorVer = int.Parse(match.Groups[1].Value);
 
-                match = Regex.Match(vcVarsFile, @"KitsRoot([1-9][0-9]*)");
-                if (match.Success)
-                    kitsRootKey = match.Groups[0].Value;
+            var vcVarsFile = File.ReadAllText(vcVarsPath);
+            var match = Regex.Match(vcVarsFile, @"Windows\\v([1-9][0-9]*)\.?([0-9]*)");
+            if (match.Success)
+                windowsSdkMajorVer = int.Parse(match.Groups[1].Value);
+
+            match = Regex.Match(vcVarsFile, @"KitsRoot([1-9][0-9]*)");
+            if (match.Success)
+                kitsRootKey = match.Groups[0].Value;
+
+            List<ToolchainVersion> windowsKitsSdks;
+            GetWindowsKitsSdks(out windowsKitsSdks);
+
+            var windowsKitSdk = (!string.IsNullOrWhiteSpace(kitsRootKey))
+                ? windowsKitsSdks.Find(version => version.Value == kitsRootKey)
+                : windowsKitsSdks.Last();
+
+            // If for some reason we cannot find the SDK version reported by VS
+            // in the system, then fallback to the latest version found.
+            if (windowsKitSdk.Value == null)
+                windowsKitSdk = windowsKitsSdks.Last();
+
+            return windowsKitSdk;
+        }
+
+        /// Gets the system include folders for the given Visual Studio version.
+        public static List<string> GetSystemIncludes(VisualStudioVersion vsVersion)
+        {
+            var vsSdk = GetVSToolchain(vsVersion);
+
+            int windowsSdkMajorVer;
+            var windowsKitSdk = GetWindowsKitsToolchain(vsVersion, out windowsSdkMajorVer);
+
+            var vsDir = vsSdk.Directory;
+            vsDir = vsDir.Substring(0, vsDir.LastIndexOf(@"\Common7\IDE",
+                StringComparison.Ordinal));
+
+            var includes = new List<string>();
+            includes.Add(Path.Combine(vsDir, @"VC\include"));
+
+            List<ToolchainVersion> windowsSdks;
+            GetWindowsSdks(out windowsSdks);
+
+            // Older Visual Studio versions provide their own Windows SDK.
+            if (windowsSdks.Count == 0)
+            {
+                includes.Add(Path.Combine(vsDir, @"\VC\PlatformSDK\Include"));
             }
+            else
+            {
+                includes.AddRange(GetIncludeDirsFromWindowsSdks(windowsSdkMajorVer, windowsSdks));
+            }
+
+            includes.AddRange(
+                CollectUniversalCRuntimeIncludeDirs(vsDir, windowsKitSdk, windowsSdkMajorVer));
+
+            return includes;
+        }
+
+        private static IEnumerable<string> GetIncludeDirsFromWindowsSdks(
+            int windowsSdkMajorVer, List<ToolchainVersion> windowsSdks)
+        {
+            var includes = new List<string>();
+            var majorWindowsSdk = windowsSdks.Find(
+                version => (int) Math.Floor(version.Version) == windowsSdkMajorVer);
+            var windowsSdkDirs = majorWindowsSdk.Directory != null ?
+                new[] { majorWindowsSdk.Directory } :
+                windowsSdks.Select(w => w.Directory).Reverse();
+            foreach (var windowsSdkDir in windowsSdkDirs)
+            {
+                if (windowsSdkMajorVer >= 8)
+                {
+                    var shared = Path.Combine(windowsSdkDir, "include", "shared");
+                    var um = Path.Combine(windowsSdkDir, "include", "um");
+                    var winrt = Path.Combine(windowsSdkDir, "include", "winrt");
+                    if (Directory.Exists(shared) && Directory.Exists(um) &&
+                        Directory.Exists(winrt))
+                        return new[] { shared, um, winrt };
+                }
+                else
+                {
+                    var include = Path.Combine(windowsSdkDir, "include");
+                    if (Directory.Exists(include))
+                        return new[] { include };
+                }
+            }
+            return new string[0];
+        }
+
+        private static IEnumerable<string> CollectUniversalCRuntimeIncludeDirs(
+            string vsDir, ToolchainVersion windowsKitSdk, int windowsSdkMajorVer)
+        {
+            var includes = new List<string>();
 
             // Check vsvars32.bat to see location of the new Universal C runtime library.
             string ucrtPaths = string.Empty;
@@ -174,46 +252,33 @@ namespace CppSharp
                     ucrtPaths = match.Groups[1].Value;
             }
 
-            List<ToolchainVersion> windowSdks;
-            GetWindowsSdks(out windowSdks);
+            if (string.IsNullOrWhiteSpace(ucrtPaths)) return includes;
 
-            var windowSdk = (windowsSdkMajorVer != 0)
-                ? windowSdks.Find(version =>
-                    (int)Math.Floor(version.Version) == windowsSdkMajorVer)
-                : windowSdks.Last();
-
-            var windowSdkDir = windowSdk.Directory;
-
-            // Older Visual Studio versions provide their own Windows SDK.
-            if (windowSdks.Count == 0)
+            // like the rest of GetSystemIncludes, this is a hack
+            // which copies the logic in the vcvarsqueryregistry.bat
+            // the correct way would be to execute the script and collect the values
+            // there's a reference implementation in the 'get_MSVC_UCRTVersion_from_VS_batch_script' branch
+            // however, it cannot be used because it needs invoking an external process to run the .bat
+            // which is killed prematurely by VS when the pre-build events of wrapper projects are run
+            const string ucrtVersionEnvVar = "%UCRTVersion%";
+            foreach (var splitPath in ucrtPaths.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
             {
-                includes.Add(Path.Combine(vsDir, @"\VC\PlatformSDK\Include"));
-            }
-            else
-            {
-                if (windowsSdkMajorVer >= 8)
+                var path = splitPath.TrimStart('\\');
+                var index = path.IndexOf(ucrtVersionEnvVar, StringComparison.Ordinal);
+                if (index >= 0)
                 {
-                    includes.Add(Path.Combine(windowSdkDir, @"include\shared"));
-                    includes.Add(Path.Combine(windowSdkDir, @"include\um"));
-                    includes.Add(Path.Combine(windowSdkDir, @"include\winrt"));
+                    var include = path.Substring(0, index);
+                    var parentIncludeDir = Path.Combine(windowsKitSdk.Directory, include);
+                    var dirPrefix = windowsSdkMajorVer + ".";
+                    var includeDir =
+                        (from dir in Directory.EnumerateDirectories(parentIncludeDir).OrderByDescending(d => d)
+                         where Path.GetFileName(dir).StartsWith(dirPrefix)
+                         select Path.Combine(windowsKitSdk.Directory, include, dir)).FirstOrDefault();
+                    if (!string.IsNullOrEmpty(includeDir))
+                        includes.Add(Path.Combine(includeDir, Path.GetFileName(path)));
                 }
                 else
-                {
-                    includes.Add(Path.Combine(windowSdkDir, "include"));
-                }
-            }
-
-            List<ToolchainVersion> windowsKitsSdks;
-            GetWindowsKitsSdks(out windowsKitsSdks);
-
-            var windowsKitSdk = (!string.IsNullOrWhiteSpace(kitsRootKey))
-                ? windowsKitsSdks.Find(version => version.Value == kitsRootKey)
-                : windowsKitsSdks.Last();
-
-            if (!string.IsNullOrWhiteSpace(ucrtPaths))
-            {
-                foreach (var path in ucrtPaths.Split(';'))
-                    includes.Add(Path.Combine(windowsKitSdk.Directory, path.TrimStart('\\')));
+                    includes.Add(Path.Combine(windowsKitSdk.Directory, path));
             }
 
             return includes;
@@ -474,28 +539,6 @@ namespace CppSharp
             }
 
             return hive;
-        }
-    }
-
-    public static partial class OptionsExtensions
-    {
-        /// Sets up the parser options to work with the given Visual Studio toolchain.
-        public static void SetupMSVC(this ParserOptions options,
-            VisualStudioVersion vsVersion = VisualStudioVersion.Latest)
-        {
-            options.MicrosoftMode = true;
-            options.NoBuiltinIncludes = true;
-            options.NoStandardIncludes = true;
-            options.Abi = CppAbi.Microsoft;
-            options.ToolSetToUse = MSVCToolchain.GetCLVersion(vsVersion) * 10000000;
-
-            options.addArguments("-fms-extensions");
-            options.addArguments("-fms-compatibility");
-            options.addArguments("-fdelayed-template-parsing");
-
-            var includes = MSVCToolchain.GetSystemIncludes(vsVersion);
-            foreach (var include in includes)
-                options.addSystemIncludeDirs(include);
         }
     }
 }

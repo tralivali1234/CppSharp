@@ -21,8 +21,7 @@ namespace CppSharp.Tests
 
         public override Type CSharpSignatureType(CSharpTypePrinterContext ctx)
         {
-            var templateArgument = ((TemplateSpecializationType) ctx.Type.Desugar()).Arguments[0];
-            return templateArgument.Type.Type;
+            return GetEnumType(ctx.Type);
         }
 
         public override string CSharpSignature(CSharpTypePrinterContext ctx)
@@ -30,14 +29,38 @@ namespace CppSharp.Tests
             return CSharpSignatureType(ctx).ToString();
         }
 
-        public override void CSharpMarshalToNative(MarshalContext ctx)
+        public override void CSharpMarshalToNative(CSharpMarshalContext ctx)
         {
-            ctx.Return.Write(ctx.Parameter.Name);
+            if (ctx.Parameter.Type.Desugar().IsAddress())
+                ctx.Return.Write("new global::System.IntPtr(&{0})", ctx.Parameter.Name);
+            else
+                ctx.Return.Write(ctx.Parameter.Name);
         }
 
-        public override void CSharpMarshalToManaged(MarshalContext ctx)
+        public override void CSharpMarshalToManaged(CSharpMarshalContext ctx)
         {
-            ctx.Return.Write(ctx.ReturnVarName);
+            if (ctx.ReturnType.Type.Desugar().IsAddress())
+            {
+                var finalType = ctx.ReturnType.Type.GetFinalPointee() ?? ctx.ReturnType.Type;
+                var enumType = GetEnumType(finalType);
+                ctx.Return.Write("*({0}*) {1}", enumType, ctx.ReturnVarName);
+            }
+            else
+            {
+                ctx.Return.Write(ctx.ReturnVarName);
+            }
+        }
+
+        private static Type GetEnumType(Type mappedType)
+        {
+            var type = mappedType.Desugar();
+            ClassTemplateSpecialization classTemplateSpecialization;
+            var templateSpecializationType = type as TemplateSpecializationType;
+            if (templateSpecializationType != null)
+                classTemplateSpecialization = templateSpecializationType.GetClassTemplateSpecialization();
+            else
+                classTemplateSpecialization = (ClassTemplateSpecialization) ((TagType) type).Declaration;
+            return classTemplateSpecialization.Arguments[0].Type.Type;
         }
     }
 
@@ -59,20 +82,21 @@ namespace CppSharp.Tests
         public override string CSharpSignature(CSharpTypePrinterContext ctx)
         {
             if (ctx.CSharpKind == CSharpTypePrinterContextKind.Native)
-                return Type.IsAddress() ? "QList.Internal*" : "QList.Internal";
+                return string.Format("QList.{0}{1}", Helpers.InternalStruct,
+                    Type.IsAddress() ? "*" : string.Empty);
 
             return string.Format("System.Collections.Generic.{0}<{1}>",
                 ctx.MarshalKind == CSharpMarshalKind.DefaultExpression ? "List" : "IList",
                 ctx.GetTemplateParameterList());
         }
 
-        public override void CSharpMarshalToNative(MarshalContext ctx)
+        public override void CSharpMarshalToNative(CSharpMarshalContext ctx)
         {
             // pointless, put just so that the generated code compiles
-            ctx.Return.Write("new QList.Internal()");
+            ctx.Return.Write("new QList.{0}()", Helpers.InternalStruct);
         }
 
-        public override void CSharpMarshalToManaged(MarshalContext ctx)
+        public override void CSharpMarshalToManaged(CSharpMarshalContext ctx)
         {
             ctx.Return.Write(ctx.ReturnVarName);
         }
@@ -87,12 +111,12 @@ namespace CppSharp.Tests
             return "int";
         }
 
-        public override void CSharpMarshalToNative(MarshalContext ctx)
+        public override void CSharpMarshalToNative(CSharpMarshalContext ctx)
         {
             ctx.Return.Write(ctx.Parameter.Name);
         }
 
-        public override void CSharpMarshalToManaged(MarshalContext ctx)
+        public override void CSharpMarshalToManaged(CSharpMarshalContext ctx)
         {
             ctx.Return.Write(ctx.ReturnVarName);
         }
@@ -126,16 +150,10 @@ namespace CppSharp.Tests
 
         public override void SetupPasses(Driver driver)
         {
-            driver.Options.GenerateInterfacesForMultipleInheritance = true;
-            driver.Options.GeneratePropertiesAdvanced = true;
-            // To ensure that calls to constructors in conversion operators
-            // are not ambiguous with multiple inheritance pass enabled.
-            driver.Options.GenerateConversionOperators = true;
-            driver.TranslationUnitPasses.AddPass(new TestAttributesPass());
-            driver.TranslationUnitPasses.AddPass(new CheckMacroPass());
+            driver.Context.TranslationUnitPasses.AddPass(new TestAttributesPass());
+            driver.Context.TranslationUnitPasses.AddPass(new CheckMacroPass());
             driver.Options.MarshalCharAsManagedChar = true;
             driver.Options.GenerateDefaultValuesForArguments = true;
-            driver.Options.GenerateSingleCSharpFile = true;
         }
 
         public override void Preprocess(Driver driver, ASTContext ctx)
@@ -154,7 +172,7 @@ namespace CppSharp.Tests
         {
             new CaseRenamePass(
                 RenameTargets.Function | RenameTargets.Method | RenameTargets.Property | RenameTargets.Delegate | RenameTargets.Variable,
-                RenameCasePattern.UpperCamelCase).VisitLibrary(driver.ASTContext);
+                RenameCasePattern.UpperCamelCase).VisitASTContext(driver.Context.ASTContext);
         }
 
         public static void Main(string[] args)

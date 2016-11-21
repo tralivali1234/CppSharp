@@ -134,16 +134,9 @@ namespace CppSharp.Generators
                     if (!string.IsNullOrWhiteSpace(line))
                         builder.Append(new string(' ', (int)totalIndent));
 
-
-                    if (childBlock.Kind == BlockKind.BlockComment &&
-                        !line.StartsWith(options.CommentPrefix))
-                    {
-                        builder.Append(options.CommentPrefix);
-                        builder.Append(' ');
-                    }
                     builder.Append(line);
 
-                    if (!line.EndsWith(Environment.NewLine))
+                    if (!line.EndsWith(Environment.NewLine, StringComparison.Ordinal))
                         builder.AppendLine();
                 }
 
@@ -159,6 +152,55 @@ namespace CppSharp.Generators
                 builder.Append(Text.StringBuilder);
 
             return builder.ToString();
+        }
+
+        public StringBuilder GenerateUnformatted(DriverOptions options)
+        {
+            if (CheckGenerate != null && !CheckGenerate())
+                return new StringBuilder(0);
+
+            if (Blocks.Count == 0)
+                return Text.StringBuilder;
+
+            var builder = new StringBuilder();
+            Block previousBlock = null;
+
+            var blockIndex = 0;
+            foreach (var childBlock in Blocks)
+            {
+                var childText = childBlock.GenerateUnformatted(options);
+
+                var nextBlock = (++blockIndex < Blocks.Count)
+                    ? Blocks[blockIndex]
+                    : null;
+
+                if (nextBlock != null)
+                {
+                    var nextText = nextBlock.GenerateUnformatted(options);
+                    if (nextText.Length == 0 &&
+                        childBlock.NewLineKind == NewLineKind.IfNotEmpty)
+                        continue;
+                }
+
+                if (childText.Length == 0)
+                    continue;
+
+                if (previousBlock != null &&
+                    previousBlock.NewLineKind == NewLineKind.BeforeNextBlock)
+                    builder.AppendLine();
+
+                builder.Append(childText);
+
+                if (childBlock.NewLineKind == NewLineKind.Always)
+                    builder.AppendLine();
+
+                previousBlock = childBlock;
+            }
+
+            if (Text.StringBuilder.Length != 0)
+                builder.Append(Text.StringBuilder);
+
+            return builder;
         }
 
         public bool IsEmpty
@@ -238,26 +280,23 @@ namespace CppSharp.Generators
 
     public abstract class Template : ITextGenerator
     {
-        public Driver Driver { get; private set; }
-        public DriverOptions Options { get; private set; }
+        public BindingContext Context { get; private set; }
+
+        public IDiagnostics Log { get { return Context.Diagnostics; } }
+        public DriverOptions Options { get { return Context.Options; } }
+
         public List<TranslationUnit> TranslationUnits { get; private set; }
 
         public TranslationUnit TranslationUnit { get { return TranslationUnits[0]; } }
-
-        public IDiagnosticConsumer Log
-        {
-            get { return Driver.Diagnostics; }
-        }
 
         public Block RootBlock { get; private set; }
         public Block ActiveBlock { get; private set; }
 
         public abstract string FileExtension { get; }
 
-        protected Template(Driver driver, IEnumerable<TranslationUnit> units)
+        protected Template(BindingContext context, IEnumerable<TranslationUnit> units)
         {
-            Driver = driver;
-            Options = driver.Options;
+            Context = context;
             TranslationUnits = new List<TranslationUnit>(units);
             RootBlock = new Block();
             ActiveBlock = RootBlock;
@@ -267,6 +306,8 @@ namespace CppSharp.Generators
 
         public string Generate()
         {
+            if (Options.IsCSharpGenerator && Options.CompileCode)
+                return RootBlock.GenerateUnformatted(Options).ToString();
             return RootBlock.Generate(Options);
         }
 

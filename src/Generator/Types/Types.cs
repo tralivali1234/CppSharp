@@ -15,13 +15,24 @@ namespace CppSharp
         public TypeIgnoreChecker(ITypeMapDatabase database)
         {
             TypeMapDatabase = database;
-            Options.VisitClassBases = false;
-            Options.VisitTemplateArguments = false;
+            VisitOptions.VisitClassBases = false;
+            VisitOptions.VisitTemplateArguments = false;
         }
 
         void Ignore()
         {
             IsIgnored = true;
+        }
+
+        public override bool VisitPrimitiveType(PrimitiveType type, TypeQualifiers quals)
+        {
+            // we do not support long double yet because its high-level representation is often problematic
+            if (type == PrimitiveType.LongDouble)
+            {
+                Ignore();
+                return false;
+            }
+            return base.VisitPrimitiveType(type, quals);
         }
 
         public override bool VisitDeclaration(Declaration decl)
@@ -32,7 +43,7 @@ namespace CppSharp
             if (decl.CompleteDeclaration != null)
                 return VisitDeclaration(decl.CompleteDeclaration);
 
-            if (decl.GenerationKind == GenerationKind.None)
+            if (!(decl is TypedefDecl) && !decl.IsGenerated)
             {
                 Ignore();
                 return false;
@@ -106,8 +117,46 @@ namespace CppSharp
                 return false;
             }
 
-            Ignore();
+            var specialization = template.GetClassTemplateSpecialization();
+            if (specialization == null || specialization.Ignore)
+                Ignore();
             return base.VisitTemplateSpecializationType(template, quals);
+        }
+
+        public override bool VisitArrayType(ArrayType array, TypeQualifiers quals)
+        {
+            TypeMap typeMap;
+            if (TypeMapDatabase.FindTypeMap(array, out typeMap) && typeMap.IsIgnored)
+            {
+                Ignore();
+                return false;
+            }
+
+            if (!array.QualifiedType.Visit(this))
+                return false;
+
+            if (array.SizeType != ArrayType.ArraySize.Constant)
+                return true;
+
+            var arrayElemType = array.Type.Desugar();
+
+            Class @class;
+            if (arrayElemType.TryGetClass(out @class) && @class.IsRefType)
+                return true;
+
+            PrimitiveType primitive;
+            if ((arrayElemType.IsPrimitiveType(out primitive) && primitive != PrimitiveType.LongDouble) ||
+                arrayElemType.IsPointerToPrimitiveType())
+                return true;
+
+            Ignore();
+            return false;
+        }
+
+        public override bool VisitUnsupportedType(UnsupportedType type, TypeQualifiers quals)
+        {
+            Ignore();
+            return false;
         }
     }
 

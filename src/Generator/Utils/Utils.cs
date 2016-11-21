@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace CppSharp
@@ -69,7 +70,7 @@ namespace CppSharp
             return obj.Select((t, i) => i == obj.Length - 1 ? t : t + seperator);
         }
 
-        public static string UppercaseFirst(string s)
+        public static string Capitalize(string s)
         {
             // Check for empty string.
             if (string.IsNullOrEmpty(s))
@@ -97,6 +98,14 @@ namespace CppSharp
                 end = source.Length + end;
 
             return source.Substring(start, end - start);
+        }
+
+        public static void TrimUnderscores(this StringBuilder stringBuilder)
+        {
+            while (stringBuilder.Length > 0 && stringBuilder[0] == '_')
+                stringBuilder.Remove(0, 1);
+            while (stringBuilder.Length > 0 && stringBuilder[stringBuilder.Length - 1] == '_')
+                stringBuilder.Remove(stringBuilder.Length - 1, 1);
         }
     }
 

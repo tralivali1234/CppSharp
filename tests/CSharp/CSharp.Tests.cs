@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using CppSharp.Utils;
 using CSharp;
 using NUnit.Framework;
 
-public class CSharpTests : GeneratorTestFixture
+public unsafe class CSharpTests : GeneratorTestFixture
 {
     public class ExtendsWrapper : TestOverrideFromSecondaryBase
     {
@@ -18,6 +19,16 @@ public class CSharpTests : GeneratorTestFixture
     [Test]
     public void TestUncompilableCode()
     {
+#pragma warning disable 0168 // warning CS0168: The variable `foo' is declared but never used
+#pragma warning disable 0219 // warning CS0219: The variable `foo' is assigned but its value is never used
+
+        ALLCAPS_UNDERSCORES a;
+        using (var testRenaming = new TestRenaming())
+        {
+            testRenaming.name();
+            testRenaming.Name();
+            testRenaming.Property.GetHashCode();
+        }
         new ForceCreationOfInterface().Dispose();
         new InheritsProtectedVirtualFromSecondaryBase().Dispose();
         new InheritanceBuffer().Dispose();
@@ -35,6 +46,12 @@ public class CSharpTests : GeneratorTestFixture
         {
             var isNoParams = foo.IsNoParams;
             foo.SetNoParams();
+            foo.Width = 5;
+            using (var hasSecondaryBaseWithAbstractWithDefaultArg = new HasSecondaryBaseWithAbstractWithDefaultArg())
+            {
+                hasSecondaryBaseWithAbstractWithDefaultArg.Abstract();
+                hasSecondaryBaseWithAbstractWithDefaultArg.AbstractWithNoDefaultArg(foo);
+            }
         }
         using (var hasOverride = new HasOverrideOfHasPropertyWithDerivedType())
             hasOverride.CauseRenamingError();
@@ -49,6 +66,9 @@ public class CSharpTests : GeneratorTestFixture
         {
             int i = typeMappedWithOperator | 5;
         }
+
+#pragma warning restore 0168
+#pragma warning restore 0219        
     }
 
     [Test]
@@ -190,7 +210,8 @@ public class CSharpTests : GeneratorTestFixture
             methodsWithDefaultValues.DefaultEnumAssignedBitwiseOr();
             methodsWithDefaultValues.DefaultEnumAssignedBitwiseOrShort();
             methodsWithDefaultValues.DefaultNonEmptyCtor();
-            methodsWithDefaultValues.DefaultMappedToEnum();
+            methodsWithDefaultValues.DefaultNonEmptyCtorWithNullPtr();
+            Assert.That(methodsWithDefaultValues.DefaultMappedToEnum(), Is.EqualTo(Flags.Flag3));
             methodsWithDefaultValues.DefaultMappedToZeroEnum();
             methodsWithDefaultValues.DefaultMappedToEnumAssignedWithCtor();
             methodsWithDefaultValues.DefaultImplicitCtorInt();
@@ -208,6 +229,13 @@ public class CSharpTests : GeneratorTestFixture
             methodsWithDefaultValues.DefaultWithFunctionCall();
             methodsWithDefaultValues.DefaultWithPropertyCall();
             methodsWithDefaultValues.DefaultWithGetPropertyCall();
+            methodsWithDefaultValues.DefaultWithIndirectStringConstant();
+            methodsWithDefaultValues.DefaultWithDirectIntConstant();
+            methodsWithDefaultValues.DefaultWithEnumInLowerCasedNameSpace();
+            methodsWithDefaultValues.DefaultWithCharFromInt();
+            methodsWithDefaultValues.DefaultWithFreeConstantInNameSpace();
+            methodsWithDefaultValues.DefaultWithStdNumericLimits(10, 5);
+            methodsWithDefaultValues.DefaultWithParamNamedSameAsMethod(5);
         }
     }
 
@@ -222,6 +250,8 @@ public class CSharpTests : GeneratorTestFixture
     {
         using (var hasOverridesWithChangedAccess = new HasOverridesWithChangedAccess())
             hasOverridesWithChangedAccess.PrivateOverride();
+        using (var hasOverridesWithIncreasedAccess = new HasOverridesWithIncreasedAccess())
+            hasOverridesWithIncreasedAccess.PrivateOverride();
     }
 
     [Test]
@@ -286,12 +316,6 @@ public class CSharpTests : GeneratorTestFixture
     }
 
     [Test]
-    public void TestInnerClasses()
-    {
-        QMap.Iterator test_iter;
-    }
-
-    [Test]
     public void TestNativeToManagedMapWithForeignObjects()
     {
         IntPtr native1;
@@ -324,19 +348,6 @@ public class CSharpTests : GeneratorTestFixture
     }
 
     [Test]
-    public void TestNotDestroyingForeignObjects()
-    {
-        using (var testNativeToManagedMap = new TestNativeToManagedMap())
-        {
-            var hasVirtualDtor2 = testNativeToManagedMap.HasVirtualDtor2;
-            Assert.Catch<InvalidOperationException>(hasVirtualDtor2.Dispose);
-            var hasVirtualDtor1 = hasVirtualDtor2.HasVirtualDtor1;
-            Assert.AreEqual(5, hasVirtualDtor1.TestField);
-            Assert.Catch<InvalidOperationException>(hasVirtualDtor1.Dispose);
-        }
-    }
-
-    [Test]
     public void TestCallingVirtualDtor()
     {
         var callDtorVirtually = new CallDtorVirtually();
@@ -359,15 +370,6 @@ public class CSharpTests : GeneratorTestFixture
         Assert.AreEqual(dervClass.M, 2);
         dervClass = new TestParamToInterfacePass(dervClass + baseInterface);
         Assert.AreEqual(dervClass.M, 2);
-    }
-
-    [Test]
-    public void TestNullAttributedFunctionPtr()
-    {
-        using (var foo = new Foo())
-        {
-            foo.AttributedFunctionPtr = null;
-        }
     }
 
     // TODO: fails on the Linux CI but works locally on Vagrant - both have the same Mono version; it also works on OS X; go figure
@@ -455,7 +457,7 @@ public class CSharpTests : GeneratorTestFixture
     [Test]
     public unsafe void TestSizeOfDerivesFromTemplateInstantiation()
     {
-        Assert.That(sizeof(DerivesFromTemplateInstantiation.Internal), Is.EqualTo(sizeof(int)));
+        Assert.That(sizeof(DerivesFromTemplateInstantiation.__Internal), Is.EqualTo(sizeof(int)));
     }
 
     [Test]
@@ -519,5 +521,161 @@ public class CSharpTests : GeneratorTestFixture
         {
         }
         Assert.IsTrue(VirtualDtorAddedInDerived.DtorCalled);
+    }
+    
+    [Test]
+    public void TestGetEnumFromNativePointer()
+    {
+        using (var getEnumFromNativePointer = new GetEnumFromNativePointer())
+        {
+            Assert.That(UsesPointerToEnumInParamOfVirtual.CallOverrideOfHasPointerToEnumInParam(
+                getEnumFromNativePointer, Flags.Flag3), Is.EqualTo(Flags.Flag3));
+        }
+    }
+
+    [Test, Ignore("We need symbols for std::string to invoke and auto-compilation of exported templates is not added yet.")]
+    public void TestStdStringConstant()
+    {
+        //Assert.That(CSharp.HasFreeConstant.AnotherUnit.STD_STRING_CONSTANT, Is.EqualTo("test"));
+        // check a second time to ensure it hasn't been improperly freed
+        //Assert.That(CSharp.HasFreeConstant.AnotherUnit.STD_STRING_CONSTANT, Is.EqualTo("test"));
+    }
+
+    // HACK: the completion of types is temporarily suspended because of problems with QtWidgets
+    [Test, Ignore]
+    public void TestTemplateInternals()
+    {
+        foreach (var internalType in new[]
+            {
+                typeof(CSharp.IndependentFields.__Internal),
+                typeof(CSharp.DependentValueFields.__Internalc__S_DependentValueFields__b),
+                //typeof(CSharp.DependentValueFields.Internal_float),
+                typeof(CSharp.DependentPointerFields.__Internal),
+                //typeof(CSharp.DependentValueFields.Internal_Ptr),
+                typeof(CSharp.HasDefaultTemplateArgument.__Internalc__S_HasDefaultTemplateArgument__I___S_IndependentFields__I)
+            })
+        {
+            var independentFields = internalType.GetFields();
+            Assert.That(independentFields.Length, Is.EqualTo(1));
+            var fieldOffset = (FieldOffsetAttribute) independentFields[0].GetCustomAttribute(typeof(FieldOffsetAttribute));
+            Assert.That(fieldOffset.Value, Is.EqualTo(0));
+        }
+        foreach (var internalType in new Type[]
+            {
+                //typeof(CSharp.TwoTemplateArgs.Internal_Ptr),
+                //typeof(CSharp.TwoTemplateArgs.Internal_intPtr_int),
+                //typeof(CSharp.TwoTemplateArgs.Internal_intPtr_float)
+            })
+        {
+            var independentFields = internalType.GetFields();
+            Assert.That(independentFields.Length, Is.EqualTo(2));
+            var fieldOffsetKey = (FieldOffsetAttribute) independentFields[0].GetCustomAttribute(typeof(FieldOffsetAttribute));
+            Assert.That(fieldOffsetKey.Value, Is.EqualTo(0));
+            var fieldOffsetValue = (FieldOffsetAttribute) independentFields[1].GetCustomAttribute(typeof(FieldOffsetAttribute));
+            Assert.That(fieldOffsetValue.Value, Is.EqualTo(Marshal.SizeOf(IntPtr.Zero)));
+        }
+    }
+
+    [Test]
+    public void TestConstantArray()
+    {
+        Assert.That(CSharp.CSharp.VariableWithFixedPrimitiveArray[0], Is.EqualTo(5));
+        Assert.That(CSharp.CSharp.VariableWithFixedPrimitiveArray[1], Is.EqualTo(10));
+        Assert.That(CSharp.CSharp.VariableWithVariablePrimitiveArray[0], Is.EqualTo(15));
+        Assert.That(CSharp.CSharp.VariableWithVariablePrimitiveArray[1], Is.EqualTo(20));
+    }
+
+    [Test]
+    public void TestPointerPassedAsItsSecondaryBase()
+    {
+        using (QApplication application = new QApplication())
+        {
+            using (QWidget widget = new QWidget())
+            {
+                using (QPainter painter = new QPainter(widget))
+                {
+                    Assert.That(widget.Test, Is.EqualTo(5));
+                }
+            }
+        }
+    }
+
+    [Test, Ignore("For no reason this doesn't work at all, and I am tired of bugs. I fixed the compilation of this thing, I have no intention of fixing it at run-time too.")]
+    public void TestUnicode()
+    {
+        using (var testString = new TestString())
+        {
+            Assert.That(testString.UnicodeConst, Is.EqualTo("ქართული ენა"));
+        }
+    }
+
+    [Test]
+    public void TestEnumProperty()
+    {
+        using (var proprietor = new Proprietor())
+        {
+            Assert.That(proprietor.Items, Is.EqualTo(Bar.Items.Item1));
+            proprietor.Items = Bar.Items.Item2;
+            Assert.That(proprietor.Items, Is.EqualTo(Bar.Items.Item2));
+            Assert.That(proprietor.ItemsByValue, Is.EqualTo(Bar.Items.Item1));
+            proprietor.ItemsByValue = Bar.Items.Item2;
+            Assert.That(proprietor.ItemsByValue, Is.EqualTo(Bar.Items.Item2));
+        }
+    }
+
+    [Test]
+    public void TestOverrideVirtualWithString()
+    {
+        using (var overrideVirtualWithString = new OverrideVirtualWithString())
+        {
+            Assert.That(overrideVirtualWithString.CallsVirtualToReturnString("test"), Is.EqualTo("test_test"));
+            Assert.IsFalse(overrideVirtualWithString.CallsVirtualToReturnBool(true));
+        }
+    }
+
+    [Test]
+    public void TestStackOverflowOnVirtualCall()
+    {
+        using (var hasMissingObjectOnVirtualCall = new HasMissingObjectOnVirtualCall())
+        {
+            using (var missingObjectOnVirtualCall = new MissingObjectOnVirtualCall())
+            {
+                hasMissingObjectOnVirtualCall.SetMissingObjectOnVirtualCall(missingObjectOnVirtualCall);
+                hasMissingObjectOnVirtualCall.MakeMissingObjectOnVirtualCall();
+            }
+        }
+    }
+
+    [Test]
+    public void TestAbstractImplementatonsInPrimaryAndSecondaryBases()
+    {
+        using (var implementsAbstractsFromPrimaryAndSecondary = new ImplementsAbstractsFromPrimaryAndSecondary())
+        {
+            Assert.That(implementsAbstractsFromPrimaryAndSecondary.AbstractInPrimaryBase, Is.EqualTo(101));
+            Assert.That(implementsAbstractsFromPrimaryAndSecondary.AbstractInSecondaryBase, Is.EqualTo(5));
+            Assert.That(implementsAbstractsFromPrimaryAndSecondary.AbstractReturnsFieldInPrimaryBase, Is.EqualTo(201));
+            Assert.That(implementsAbstractsFromPrimaryAndSecondary.AbstractReturnsFieldInSecondaryBase, Is.EqualTo(202));
+        }
+    }
+
+    private class OverrideVirtualWithString : HasVirtualTakesReturnsProblematicTypes
+    {
+        public override string VirtualTakesAndReturnsString(string c)
+        {
+            return "test_test";
+        }
+
+        public override bool VirtualTakesAndReturnsBool(bool b)
+        {
+            return !base.VirtualTakesAndReturnsBool(b);
+        }
+    }
+
+    private class GetEnumFromNativePointer : UsesPointerToEnumInParamOfVirtual
+    {
+        public override Flags HasPointerToEnumInParam(Flags pointerToEnum)
+        {
+            return base.HasPointerToEnumInParam(pointerToEnum);
+        }
     }
 }

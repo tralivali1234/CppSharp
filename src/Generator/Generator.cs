@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using CppSharp.AST;
 
@@ -10,8 +11,11 @@ namespace CppSharp.Generators
     /// </summary>
     public enum GeneratorKind
     {
-        CLI,
-        CSharp,
+        CLI = 1,
+        CSharp = 2,
+        C,
+        CPlusPlus,
+        ObjectiveC
     }
 
     /// <summary>
@@ -33,13 +37,16 @@ namespace CppSharp.Generators
     /// <summary>
     /// Generators are the base class for each language backend.
     /// </summary>
-    public abstract class Generator
+    public abstract class Generator : IDisposable
     {
-        public Driver Driver { get; private set; }
+        public static string CurrentOutputNamespace = string.Empty;
 
-        protected Generator(Driver driver)
+        public BindingContext Context { get; private set; }
+
+        protected Generator(BindingContext context)
         {
-            Driver = driver;
+            Context = context;
+            CppSharp.AST.Type.TypePrinterDelegate += TypePrinterDelegate;
         }
 
         /// <summary>
@@ -67,51 +74,62 @@ namespace CppSharp.Generators
         {
             var outputs = new List<GeneratorOutput>();
 
-            var units = Driver.ASTContext.TranslationUnits.Where(
-                u => u.IsGenerated && u.HasDeclarations && !u.IsSystemHeader && u.IsValid);
-            if (Driver.Options.IsCSharpGenerator && Driver.Options.GenerateSingleCSharpFile)
-                GenerateSingleTemplate(units, outputs);
+            var units = Context.ASTContext.TranslationUnits.GetGenerated().ToList();
+
+            if (Context.Options.IsCSharpGenerator)
+                GenerateSingleTemplate(outputs);
             else
-                foreach (var unit in units)
-                    GenerateTemplate(unit, outputs);
+                GenerateTemplates(outputs, units.Where(u => !u.IsSystemHeader));
+
             return outputs;
         }
 
-        private void GenerateSingleTemplate(IEnumerable<TranslationUnit> units, ICollection<GeneratorOutput> outputs)
+        private void GenerateTemplates(List<GeneratorOutput> outputs, IEnumerable<TranslationUnit> units)
         {
-            var output = new GeneratorOutput
+            foreach (var unit in units)
             {
-                TranslationUnit = new TranslationUnit
-                {
-                    FilePath = string.Format("{0}.cs", Driver.Options.OutputNamespace ?? Driver.Options.LibraryName)
-                },
-                Templates = Generate(units)
-            };
-            output.Templates[0].Process();
-            outputs.Add(output);
+                var includeDir = Path.GetDirectoryName(unit.FilePath);
+                var templates = Generate(new[] { unit });
+                if (templates.Count == 0)
+                    return;
 
-            OnUnitGenerated(output);
+                CurrentOutputNamespace = unit.Module.OutputNamespace;
+                foreach (var template in templates)
+                {
+                    template.Process();
+                }
+
+                var output = new GeneratorOutput
+                {
+                    TranslationUnit = unit,
+                    Templates = templates
+                };
+
+                outputs.Add(output);
+
+                OnUnitGenerated(output);
+            }
         }
 
-        private void GenerateTemplate(TranslationUnit unit, ICollection<GeneratorOutput> outputs)
+        private void GenerateSingleTemplate(ICollection<GeneratorOutput> outputs)
         {
-            var templates = Generate(new[] { unit });
-            if (templates.Count == 0)
-                return;
-
-            foreach (var template in templates)
+            foreach (var module in Context.Options.Modules)
             {
-                template.Process();
+                CurrentOutputNamespace = module.OutputNamespace;
+                var output = new GeneratorOutput
+                {
+                    TranslationUnit = new TranslationUnit
+                    {
+                        FilePath = string.Format("{0}.cs", module.LibraryName),
+                        Module = module
+                    },
+                    Templates = Generate(module.Units.GetGenerated())
+                };
+                output.Templates[0].Process();
+                outputs.Add(output);
+
+                OnUnitGenerated(output);
             }
-
-            var output = new GeneratorOutput
-            {
-                TranslationUnit = unit,
-                Templates = templates
-            };
-            outputs.Add(output);
-
-            OnUnitGenerated(output);
         }
 
         /// <summary>
@@ -119,9 +137,16 @@ namespace CppSharp.Generators
         /// </summary>
         public abstract List<Template> Generate(IEnumerable<TranslationUnit> units);
 
+        protected abstract string TypePrinterDelegate(CppSharp.AST.Type type);
+
         public static string GeneratedIdentifier(string id)
         {
             return "__" + id;
+        }
+
+        public void Dispose()
+        {
+            CppSharp.AST.Type.TypePrinterDelegate -= TypePrinterDelegate;
         }
     }
 }

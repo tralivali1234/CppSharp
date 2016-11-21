@@ -1,4 +1,5 @@
-﻿using CppSharp.AST;
+﻿using System;
+using CppSharp.AST;
 using CppSharp.AST.Extensions;
 
 namespace CppSharp.Passes
@@ -73,10 +74,8 @@ namespace CppSharp.Passes
 
         static bool IsDescendentOf(Class @class, Class parent)
         {
-            if (!@class.HasBaseClass)
-                return @class == parent;
-
-            return IsDescendentOf(@class.BaseClass, parent);
+            return @class == parent ||
+                (@class.HasBaseClass && IsDescendentOf(@class.BaseClass, parent));
         }
 
         public bool VisitClassDecl(Class @class)
@@ -86,6 +85,11 @@ namespace CppSharp.Passes
         }
 
         #region Dummy implementations
+
+        public bool VisitClassTemplateSpecializationDecl(ClassTemplateSpecialization specialization)
+        {
+            return false;
+        }
 
         public bool VisitFunctionType(FunctionType function, TypeQualifiers quals)
         {
@@ -118,6 +122,11 @@ namespace CppSharp.Passes
         }
 
         public bool VisitTemplateSpecializationType(TemplateSpecializationType template, TypeQualifiers quals)
+        {
+            return false;
+        }
+
+        public bool VisitDependentTemplateSpecializationType(DependentTemplateSpecializationType template, TypeQualifiers quals)
         {
             return false;
         }
@@ -157,12 +166,27 @@ namespace CppSharp.Passes
             return true;
         }
 
+        public bool VisitUnaryTransformType(UnaryTransformType unaryTransformType, TypeQualifiers quals)
+        {
+            return false;
+        }
+
+        public bool VisitVectorType(VectorType vectorType, TypeQualifiers quals)
+        {
+            return false;
+        }
+
         public bool VisitCILType(CILType type, TypeQualifiers quals)
         {
             return false;
         }
 
         public bool VisitArrayType(ArrayType array, TypeQualifiers quals)
+        {
+            return false;
+        }
+
+        public bool VisitUnsupportedType(UnsupportedType type, TypeQualifiers quals)
         {
             return false;
         }
@@ -197,7 +221,17 @@ namespace CppSharp.Passes
             return false;
         }
 
+        public bool VisitTypeAliasDecl(TypeAlias typeAlias)
+        {
+            return false;
+        }
+
         public bool VisitEnumDecl(Enumeration @enum)
+        {
+            return false;
+        }
+
+        public bool VisitEnumItemDecl(Enumeration.Item item)
         {
             return false;
         }
@@ -242,6 +276,41 @@ namespace CppSharp.Passes
             return false;
         }
 
+        public bool VisitTemplateTemplateParameterDecl(TemplateTemplateParameter templateTemplateParameter)
+        {
+            return false;
+        }
+
+        public bool VisitTemplateParameterDecl(TypeTemplateParameter templateParameter)
+        {
+            return false;
+        }
+
+        public bool VisitNonTypeTemplateParameterDecl(NonTypeTemplateParameter nonTypeTemplateParameter)
+        {
+            return false;
+        }
+
+        public bool VisitTypeAliasTemplateDecl(TypeAliasTemplate typeAliasTemplate)
+        {
+            return false;
+        }
+
+        public bool VisitFunctionTemplateSpecializationDecl(FunctionTemplateSpecialization specialization)
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool VisitVarTemplateDecl(VarTemplate template)
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool VisitVarTemplateSpecializationDecl(VarTemplateSpecialization template)
+        {
+            throw new NotImplementedException();
+        }
+
         #endregion
     }
 
@@ -256,7 +325,7 @@ namespace CppSharp.Passes
     /// </summary>
     public class CheckVirtualOverrideReturnCovariance : TranslationUnitPass
     {
-        public override bool VisitMethodDecl(AST.Method method)
+        public override bool VisitMethodDecl(Method method)
         {
             if (!VisitDeclaration(method))
                 return false;
@@ -273,7 +342,7 @@ namespace CppSharp.Passes
             {
                 method.ReturnType = overridenMethod.ReturnType;
 
-                Driver.Diagnostics.Debug(
+                Diagnostics.Debug(
                     "{0} return type is co-variant with overriden base",
                     method.QualifiedOriginalName);
             }

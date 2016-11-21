@@ -60,6 +60,7 @@ public:
     Abstract* getAbstract();
 private:
     TemplateClass<int> t;
+    TemplateClass<Derived> d;
 };
 
 class DLL_API HasVirtualInDependency : public HasVirtualInCore
@@ -69,3 +70,12 @@ public:
     HasVirtualInDependency* managedObject;
     int callManagedOverride();
 };
+
+namespace NamespacesBase
+{
+    class DLL_API ClassInNamespaceNamedAfterDependency
+    {
+    private:
+        Base base;
+    };
+}

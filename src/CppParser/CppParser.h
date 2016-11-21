@@ -22,23 +22,36 @@ enum class LanguageVersion
     */
     C,
     /**
+    * The C programming language (GNU version).
+    */
+    GNUC,
+    /**
     * The C++ programming language year 1998; supports deprecated constructs.
     */
     CPlusPlus98,
     /**
+    * The C++ programming language year 1998; supports deprecated constructs (GNU version).
+    */
+    GNUPlusPlus98,
+    /**
     * The C++ programming language year 2011.
     */
-    CPlusPlus11
+    CPlusPlus11,
+    /**
+    * The C++ programming language year 2011 (GNU version).
+    */
+    GNUPlusPlus11
 };
 
-struct CS_API ParserOptions
+struct CS_API CppParserOptions
 {
-    ParserOptions();
+    CppParserOptions();
 
     VECTOR_STRING(Arguments)
 
-    // C/C++ header file name.
-    STRING(FileName)
+    STRING(LibraryFile)
+    // C/C++ header file names.
+    VECTOR_STRING(SourceFiles)
 
     // Include directories
     VECTOR_STRING(IncludeDirs)
@@ -119,9 +132,9 @@ class CS_API ClangParser
 {
 public:
 
-    static ParserResult* ParseHeader(ParserOptions* Opts);
-    static ParserResult* ParseLibrary(ParserOptions* Opts);
-    static ParserTargetInfo* GetTargetInfo(ParserOptions* Opts);
+    static ParserResult* ParseHeader(CppParserOptions* Opts);
+    static ParserResult* ParseLibrary(CppParserOptions* Opts);
+    static ParserTargetInfo* GetTargetInfo(CppParserOptions* Opts);
 };
 
 } }

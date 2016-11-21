@@ -3,6 +3,10 @@ using CppSharp.Passes;
 using CppSharp.AST;
 using CppSharp.AST.Extensions;
 using NUnit.Framework;
+using CppSharp.Generators.CSharp;
+using System;
+using CppSharp.Generators;
+using CppSharp.Parser;
 
 namespace CppSharp.Generator.Tests.AST
 {
@@ -12,11 +16,11 @@ namespace CppSharp.Generator.Tests.AST
         [TestFixtureSetUp]
         public void Init()
         {
-        }
-
-        [SetUp]
-        public void Setup()
-        {
+            CppSharp.AST.Type.TypePrinterDelegate = type =>
+            {
+                PrimitiveType primitiveType;
+                return type.IsPrimitiveType(out primitiveType) ? primitiveType.ToString() : string.Empty;
+            };
             ParseLibrary("AST.h", "ASTExtensions.h");
         }
 
@@ -36,10 +40,10 @@ namespace CppSharp.Generator.Tests.AST
                         Modifier = PointerType.TypeModifier.LVReference,
                         QualifiedPointee = new QualifiedType(
                             new BuiltinType(PrimitiveType.Short), 
-                            new TypeQualifiers() { IsConst = true })
+                            new TypeQualifiers { IsConst = true })
                     }),
                 new QualifiedType(
-                    new PointerType()
+                    new PointerType
                     {
                         Modifier = PointerType.TypeModifier.Pointer,
                         QualifiedPointee = new QualifiedType(new BuiltinType(PrimitiveType.Int))
@@ -79,6 +83,11 @@ namespace CppSharp.Generator.Tests.AST
                 throw new System.NotImplementedException();
             }
 
+            public bool VisitClassTemplateSpecializationDecl(ClassTemplateSpecialization specialization)
+            {
+                throw new NotImplementedException();
+            }
+
             public bool VisitFieldDecl(Field field)
             {
                 throw new System.NotImplementedException();
@@ -104,9 +113,19 @@ namespace CppSharp.Generator.Tests.AST
                 throw new System.NotImplementedException();
             }
 
+            public bool VisitTypeAliasDecl(TypeAlias typeAlias)
+            {
+                throw new NotImplementedException();
+            }
+
             public bool VisitEnumDecl(Enumeration @enum)
             {
                 throw new System.NotImplementedException();
+            }
+
+            public bool VisitEnumItemDecl(Enumeration.Item item)
+            {
+                throw new NotImplementedException();
             }
 
             public bool VisitVariableDecl(Variable variable)
@@ -148,6 +167,41 @@ namespace CppSharp.Generator.Tests.AST
             {
                 throw new System.NotImplementedException();
             }
+
+            public bool VisitTemplateParameterDecl(TypeTemplateParameter templateParameter)
+            {
+                throw new NotImplementedException();
+            }
+
+            public bool VisitNonTypeTemplateParameterDecl(NonTypeTemplateParameter nonTypeTemplateParameter)
+            {
+                throw new NotImplementedException();
+            }
+
+            public bool VisitTemplateTemplateParameterDecl(TemplateTemplateParameter templateTemplateParameter)
+            {
+                throw new NotImplementedException();
+            }
+
+            public bool VisitTypeAliasTemplateDecl(TypeAliasTemplate typeAliasTemplate)
+            {
+                throw new NotImplementedException();
+            }
+
+            public bool VisitFunctionTemplateSpecializationDecl(FunctionTemplateSpecialization specialization)
+            {
+                throw new NotImplementedException();
+            }
+
+            public bool VisitVarTemplateDecl(VarTemplate template)
+            {
+                throw new NotImplementedException();
+            }
+
+            public bool VisitVarTemplateSpecializationDecl(VarTemplateSpecialization template)
+            {
+                throw new NotImplementedException();
+            }
         }
         #endregion
 
@@ -183,8 +237,6 @@ namespace CppSharp.Generator.Tests.AST
             Assert.AreEqual(2, twoParamMethodTemplate.Parameters.Count);
             Assert.AreEqual("T", twoParamMethodTemplate.Parameters[0].Name);
             Assert.AreEqual("S", twoParamMethodTemplate.Parameters[1].Name);
-            Assert.IsTrue(twoParamMethodTemplate.Parameters[0].IsTypeParameter);
-            Assert.IsTrue(twoParamMethodTemplate.Parameters[1].IsTypeParameter);
             var twoParamMethod = twoParamMethodTemplate.TemplatedFunction as Method;
             Assert.IsNotNull(twoParamMethod);
             Assert.IsInstanceOf<TemplateParameterType>(twoParamMethod.Parameters[0].Type);
@@ -223,9 +275,9 @@ namespace CppSharp.Generator.Tests.AST
             Assert.AreEqual(1, integerInst.Arguments.Count);
             var intArgument = integerInst.Arguments[0];
             Assert.AreEqual(new BuiltinType(PrimitiveType.Int), intArgument.Type.Type);
-            Class classTemplate;
-            Assert.IsTrue(typeDef.Type.TryGetClass(out classTemplate));
-            Assert.AreEqual(classTemplate, template.TemplatedClass);
+            ClassTemplateSpecialization classTemplateSpecialization;
+            Assert.IsTrue(typeDef.Type.TryGetDeclaration(out classTemplateSpecialization));
+            Assert.AreSame(classTemplateSpecialization.TemplatedDecl.TemplatedClass, template.TemplatedClass);
         }
 
         [Test]
@@ -237,13 +289,13 @@ namespace CppSharp.Generator.Tests.AST
         [Test]
         public void TestLineNumber()
         {
-            Assert.AreEqual(63, AstContext.FindClass("HiddenInNamespace").First().LineNumberStart);
+            Assert.AreEqual(65, AstContext.FindClass("HiddenInNamespace").First().LineNumberStart);
         }
 
         [Test]
         public void TestLineNumberOfFriend()
         {
-            Assert.AreEqual(86, AstContext.FindFunction("operator+").First().LineNumberStart);
+            Assert.AreEqual(88, AstContext.FindFunction("operator+").First().LineNumberStart);
         }
 
         [Test]
@@ -263,9 +315,11 @@ namespace CppSharp.Generator.Tests.AST
         [Test]
         public void TestAmbiguity()
         {
-            new CheckAmbiguousFunctions { Driver = new Driver(new DriverOptions(), new TextDiagnosticPrinter()) }
-                .VisitLibrary(AstContext);
-            Assert.IsTrue(AstContext.FindClass("HasAmbiguousFunctions").Single().FindMethod("ambiguous").IsAmbiguous);            
+            var bindingContext = new BindingContext(new TextDiagnosticPrinter(), new DriverOptions(),
+                new ParserOptions());
+            new CleanUnitPass { Context = bindingContext }.VisitASTContext(AstContext);
+            new CheckAmbiguousFunctions { Context = bindingContext }.VisitASTContext(AstContext);
+            Assert.IsTrue(AstContext.FindClass("HasAmbiguousFunctions").Single().FindMethod("ambiguous").IsAmbiguous);
         }
 
         [Test]
@@ -275,5 +329,112 @@ namespace CppSharp.Generator.Tests.AST
                 .Find(f => f.Name == "AtomicInt").Type as BuiltinType;
             Assert.IsTrue(type != null && type.IsPrimitiveType(PrimitiveType.Int));
         }
-    }
+
+        [Test]
+        public void TestMacroLineNumber()
+        {
+            Assert.AreEqual(98, AstContext.FindClass("HasAmbiguousFunctions").First().Specifiers.Last().LineNumberStart);
+        }
+
+        [Test]
+        public void TestImplicitDeclaration()
+        {
+            Assert.IsTrue(AstContext.FindClass("ImplicitCtor").First().Constructors.First(
+                c => c.Parameters.Count == 0).IsImplicit);
+        }
+
+        [Test]
+        public void TestSpecializationArguments()
+        {
+            var classTemplate = AstContext.FindDecl<ClassTemplate>("TestSpecializationArguments").FirstOrDefault();
+            Assert.IsTrue(classTemplate.Specializations[0].Arguments[0].Type.Type.IsPrimitiveType(PrimitiveType.Int));
+        }
+
+        [Test]
+        public void TestFunctionInstantiatedFrom()
+        {
+            var classTemplate = AstContext.FindDecl<ClassTemplate>("TestSpecializationArguments").FirstOrDefault();
+            Assert.AreEqual(classTemplate.Specializations[0].Constructors.First(
+                c => !c.IsCopyConstructor && !c.IsMoveConstructor).InstantiatedFrom,
+                classTemplate.TemplatedClass.Constructors.First(c => !c.IsCopyConstructor && !c.IsMoveConstructor));
+        }
+
+        [Test]
+        public void TestComments()
+        {
+            var @class = AstContext.FindCompleteClass("TestComments");
+            var commentClass = @class.Comment.FullComment.CommentToString(Options.CommentPrefix);
+            Assert.AreEqual(@"/// <summary>
+/// <para>Hash set/map base class.</para>
+/// <para>Note that to prevent extra memory use due to vtable pointer, %HashBase intentionally does not declare a virtual destructor</para>
+/// <para>and therefore %HashBase pointers should never be used.</para>
+/// </summary>".Replace("\r", string.Empty), commentClass.Replace("\r", string.Empty));
+
+            var method = @class.Methods.First(m => m.Name == "GetIOHandlerControlSequence");
+            var commentMethod = method.Comment.FullComment.CommentToString(Options.CommentPrefix);
+            Assert.AreEqual(@"/// <summary>
+/// <para>Get the string that needs to be written to the debugger stdin file</para>
+/// <para>handle when a control character is typed.</para>
+/// </summary>
+/// <remarks>
+/// <para>Some GUI programs will intercept &quot;control + char&quot; sequences and want</para>
+/// <para>to have them do what normally would happen when using a real</para>
+/// <para>terminal, so this function allows GUI programs to emulate this</para>
+/// <para>functionality.</para>
+/// </remarks>
+/// <param name=""ch"">
+/// <para>The character that was typed along with the control key</para>
+/// </param>
+/// <returns>
+/// <para>The string that should be written into the file handle that is</para>
+/// <para>feeding the input stream for the debugger, or NULL if there is</para>
+/// <para>no string for this control key.</para>
+/// </returns>".Replace("\r", string.Empty), commentMethod.Replace("\r", string.Empty));
+        }
+
+        [Test]
+        public void TestCompletionOfClassTemplates()
+        {
+            var templates = AstContext.FindDecl<ClassTemplate>("ForwardedTemplate").ToList();
+            var template = templates.Single(t => t.DebugText.Replace("\r", string.Empty) ==
+                "template <typename T>\r\nclass ForwardedTemplate\r\n{\r\n}".Replace("\r", string.Empty));
+            Assert.IsFalse(template.IsIncomplete);
+        }
+
+        [Test]
+        public void TestOriginalNamesOfSpecializations()
+        {
+            var template = AstContext.FindDecl<ClassTemplate>("TestSpecializationArguments").First();
+            Assert.That(template.Specializations[0].Constructors.First().QualifiedName,
+                Is.Not.EqualTo(template.Specializations[1].Constructors.First().QualifiedName));
+        }
+
+        [Test]
+        public void TestPrintingConstPointerWithConstType()
+        {
+            var template = AstContext.FindDecl<ClassTemplate>("TestSpecializationArguments").First();
+            var cppTypePrinter = new CppTypePrinter { PrintScopeKind = CppTypePrintScopeKind.Qualified };
+            var builtin = new BuiltinType(PrimitiveType.Char);
+            var pointee = new QualifiedType(builtin, new TypeQualifiers { IsConst = true });
+            var pointer = new QualifiedType(new PointerType(pointee), new TypeQualifiers { IsConst = true });
+            var type = pointer.Visit(cppTypePrinter);
+            Assert.AreEqual(type, "const char* const");
+        }
+
+        [Test]
+        public void TestPrintingSpecializationWithConstValue()
+        {
+            var template = AstContext.FindDecl<ClassTemplate>("TestSpecializationArguments").First();
+            var cppTypePrinter = new CppTypePrinter { PrintScopeKind = CppTypePrintScopeKind.Qualified };
+            Assert.That(template.Specializations.Last().Visit(cppTypePrinter),
+                Is.EqualTo("TestSpecializationArguments<const TestASTEnumItemByName>"));
+        }
+
+        [Test]
+        public void TestLayoutBase()
+        {
+            var @class = AstContext.FindCompleteClass("TestComments");
+            Assert.That(@class.Layout.Bases.Count, Is.EqualTo(0));
+        }
+	}
 }

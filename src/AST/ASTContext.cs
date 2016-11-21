@@ -26,31 +26,37 @@ namespace CppSharp.AST
             TranslationUnits = new List<TranslationUnit>();
         }
 
-        /// Finds an existing module or creates a new one given a file path.
-        public TranslationUnit FindOrCreateModule(string file)
+        static private string NormalizeTranslationUnitFilePath(string name)
         {
-            if (!file.StartsWith("<"))
-            {
-                try
-                {
-                    file = Path.GetFullPath(file);
-                }
-                catch (ArgumentException)
-                {
-                    // Normalization errors are expected when dealing with virtual
-                    // compiler files like <built-in>.
-                }
-            }
-            
-            var module = TranslationUnits.Find(m => m.FilePath.Equals(file));
+            if (name.StartsWith("<"))
+                return name;
 
-            if (module == null)
+            try
             {
-                module = new TranslationUnit(file);
-                TranslationUnits.Add(module);
+                name = Path.GetFullPath(name);
+            }
+            catch (ArgumentException)
+            {
+                // Normalization errors are expected when dealing with virtual
+                // compiler files like <built-in>.
             }
 
-            return module;
+            return name;
+        }
+
+        /// Finds an existing or creates a new one translation unit given a path.
+        public TranslationUnit FindOrCreateTranslationUnit(string file)
+        {
+            file = NormalizeTranslationUnitFilePath(file);
+            var translationUnit = TranslationUnits.Find(m => m.FilePath.Equals(file));
+
+            if (translationUnit == null)
+            {
+                translationUnit = new TranslationUnit(file);
+                TranslationUnits.Add(translationUnit);
+            }
+
+            return translationUnit;
         }
 
         /// Finds an existing enum in the library modules.
@@ -91,7 +97,7 @@ namespace CppSharp.AST
         }
 
         /// Finds an existing typedef in the library modules.
-        public IEnumerable<TypedefDecl> FindTypedef(string name)
+        public IEnumerable<TypedefNameDecl> FindTypedef(string name)
         {
             return TranslationUnits.Select(module => module.FindTypedef(name))
                 .Where(type => type != null);
@@ -100,14 +106,39 @@ namespace CppSharp.AST
         /// Finds an existing declaration by name.
         public IEnumerable<T> FindDecl<T>(string name) where T : Declaration
         {
-            foreach (var module in TranslationUnits)
+            switch (typeof(T).Name)
             {
-                if (module.FindEnum(name) as T != null)
-                    yield return module.FindEnum(name) as T;
-                else if (module.FindClass(name) as T != null)
-                    yield return module.FindClass(name) as T;
-                else if (module.FindFunction(name) as T != null)
-                    yield return module.FindFunction(name) as T;
+                case "Enumeration":
+                    foreach (var module in TranslationUnits)
+                        yield return module.FindEnum(name) as T;
+                    break;
+                case "Class":
+                    foreach (var module in TranslationUnits)
+                        yield return module.FindClass(name) as T;
+                    break;
+                case "ClassTemplate":
+                    foreach (var module in TranslationUnits)
+                        foreach (var template in module.FindClassTemplate(name))
+                            yield return template as T;
+                    break;
+                case "Function":
+                    foreach (var module in TranslationUnits)
+                        yield return module.FindFunction(name) as T;
+                    break;
+                case "Variable":
+                    foreach (var variable in from unit in TranslationUnits
+                                             from variable in unit.Variables
+                                             where variable.Name == name
+                                             select variable)
+                        yield return variable as T;
+                    break;
+                default:
+                    foreach (var decl in from unit in TranslationUnits
+                                         from decl in unit.Declarations
+                                         where decl.Name == name
+                                         select decl)
+                        yield return decl as T;
+                    break;
             }
         }
 

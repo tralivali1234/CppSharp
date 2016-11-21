@@ -9,18 +9,17 @@ namespace CppSharp.Generators.CSharp
         private readonly CSharpTypePrinter typePrinter;
         private readonly CSharpExpressionPrinter expressionPrinter;
 
-        public CSharpGenerator(Driver driver) : base(driver)
+        public CSharpGenerator(BindingContext context) : base(context)
         {
-            typePrinter = new CSharpTypePrinter(driver);
+            typePrinter = new CSharpTypePrinter(context);
             expressionPrinter = new CSharpExpressionPrinter(typePrinter);
-            CppSharp.AST.Type.TypePrinterDelegate += type => type.Visit(typePrinter).Type;
         }
 
         public override List<Template> Generate(IEnumerable<TranslationUnit> units)
         {
             var outputs = new List<Template>();
 
-            var template = new CSharpTextTemplate(Driver, units, typePrinter, expressionPrinter);
+            var template = new CSharpSources(Context, units, typePrinter, expressionPrinter);
             outputs.Add(template);
 
             return outputs;
@@ -33,9 +32,14 @@ namespace CppSharp.Generators.CSharp
             // CheckAbiParameters runs last because hidden structure parameters
             // should always occur first.
 
-            Driver.AddTranslationUnitPass(new CheckAbiParameters());
+            Context.TranslationUnitPasses.AddPass(new CheckAbiParameters());
 
             return true;
+        }
+
+        protected override string TypePrinterDelegate(Type type)
+        {
+            return type.Visit(typePrinter).Type;
         }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using CppSharp.AST.Extensions;
 
 namespace CppSharp.AST
 {
@@ -24,6 +25,12 @@ namespace CppSharp.AST
 
         public abstract T Visit<T>(ITypeVisitor<T> visitor, TypeQualifiers quals
             = new TypeQualifiers());
+
+        public string ToNativeString()
+        {
+            var cppTypePrinter = new CppTypePrinter { PrintScopeKind = CppTypePrintScopeKind.Qualified };
+            return Visit(cppTypePrinter);
+        }
 
         public override string ToString()
         {
@@ -317,7 +324,7 @@ namespace CppSharp.AST
 
         public override T Visit<T>(ITypeVisitor<T> visitor, TypeQualifiers quals = new TypeQualifiers())
         {
-            return visitor.VisitPointerType(this, QualifiedPointee.Qualifiers);
+            return visitor.VisitPointerType(this, quals);
         }
 
         public override object Clone()
@@ -392,10 +399,15 @@ namespace CppSharp.AST
     /// </summary>
     public class TypedefType : Type
     {
-        public TypedefDecl Declaration;
+        public TypedefNameDecl Declaration { get; set; }
 
         public TypedefType()
         {
+        }
+
+        public TypedefType(TypedefNameDecl decl)
+        {
+            Declaration = decl;
         }
 
         public TypedefType(TypedefType type)
@@ -417,10 +429,7 @@ namespace CppSharp.AST
         public override bool Equals(object obj)
         {
             var typedef = obj as TypedefType;
-            if (typedef == null) return false;
-
-            var t = Declaration.Equals(typedef.Declaration);
-            return t;
+            return Declaration.Type.Equals(typedef == null ? obj : typedef.Declaration.Type);
         }
 
         public override int GetHashCode()
@@ -593,13 +602,30 @@ namespace CppSharp.AST
             case ArgumentKind.Expression:
                 return true;
             default:
-                throw new Exception("Unknowed TemplateArgument Kind");
+                throw new Exception("Unknown TemplateArgument Kind");
             }
         }
 
         public override int GetHashCode()
         {
             return base.GetHashCode();
+        }
+
+        public override string ToString()
+        {
+            switch (Kind)
+            {
+                case ArgumentKind.Type:
+                    return Type.ToString();
+                case ArgumentKind.Declaration:
+                    return Declaration.ToString();
+                case ArgumentKind.Integral:
+                    return Integral.ToString();
+                case ArgumentKind.Expression:
+                    return string.Empty;
+                default:
+                    throw new Exception("Unknown TemplateArgument Kind");
+            }
         }
     }
 
@@ -625,14 +651,36 @@ namespace CppSharp.AST
                     Type = new QualifiedType((Type) t.Type.Type.Clone(), t.Type.Qualifiers)
                 }).ToList();
             Template = type.Template;
-            Desugared = (Type) type.Desugared.Clone();
+            Desugared = new QualifiedType((Type) type.Desugared.Type.Clone(), type.Desugared.Qualifiers);
         }
 
         public List<TemplateArgument> Arguments;
 
         public Template Template;
 
-        public Type Desugared;
+        public QualifiedType Desugared;
+
+        public ClassTemplateSpecialization GetClassTemplateSpecialization()
+        {
+            return GetDeclaration() as ClassTemplateSpecialization;
+        }
+
+        private Declaration GetDeclaration()
+        {
+            var finalType = Desugared.Type.GetFinalPointee() ?? Desugared.Type;
+
+            var tagType = finalType as TagType;
+            if (tagType != null)
+                return tagType.Declaration;
+
+            var injectedClassNameType = finalType as InjectedClassNameType;
+            if (injectedClassNameType == null)
+                return null;
+
+            var injectedSpecializationType = (TemplateSpecializationType)
+                injectedClassNameType.InjectedSpecializationType.Type;
+            return injectedSpecializationType.GetDeclaration();
+        }
 
         public override T Visit<T>(ITypeVisitor<T> visitor,
                                    TypeQualifiers quals = new TypeQualifiers())
@@ -650,8 +698,63 @@ namespace CppSharp.AST
             var type = obj as TemplateSpecializationType;
             if (type == null) return false;
 
-            return Arguments.SequenceEqual(type.Arguments)
-                && Template.Name == type.Template.Name;
+            return Arguments.SequenceEqual(type.Arguments) &&
+                ((Template != null && Template.Name == type.Template.Name) ||
+                Desugared == type.Desugared);
+        }
+
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
+    }
+
+    /// <summary>
+    /// Represents a C++ dependent template specialization type.
+    /// </summary>
+    public class DependentTemplateSpecializationType : Type
+    {
+        public DependentTemplateSpecializationType()
+        {
+            Arguments = new List<TemplateArgument>();
+        }
+
+        public DependentTemplateSpecializationType(DependentTemplateSpecializationType type)
+            : base(type)
+        {
+            Arguments = type.Arguments.Select(
+                t => new TemplateArgument
+                {
+                    Declaration = t.Declaration,
+                    Integral = t.Integral,
+                    Kind = t.Kind,
+                    Type = new QualifiedType((Type) t.Type.Type.Clone(), t.Type.Qualifiers)
+                }).ToList();
+            Desugared = new QualifiedType((Type) type.Desugared.Type.Clone(), type.Desugared.Qualifiers);
+        }
+
+        public List<TemplateArgument> Arguments;
+
+        public QualifiedType Desugared;
+
+        public override T Visit<T>(ITypeVisitor<T> visitor,
+                                   TypeQualifiers quals = new TypeQualifiers())
+        {
+            return visitor.VisitDependentTemplateSpecializationType(this, quals);
+        }
+
+        public override object Clone()
+        {
+            return new DependentTemplateSpecializationType(this);
+        }
+
+        public override bool Equals(object obj)
+        {
+            var type = obj as TemplateSpecializationType;
+            if (type == null) return false;
+
+            return Arguments.SequenceEqual(type.Arguments) &&
+                Desugared == type.Desugared;
         }
 
         public override int GetHashCode()
@@ -665,7 +768,7 @@ namespace CppSharp.AST
     /// </summary>
     public class TemplateParameterType : Type
     {
-        public TemplateParameter Parameter;
+        public TypeTemplateParameter Parameter;
         public uint Depth;
         public uint Index;
         public bool IsParameterPack;
@@ -677,10 +780,9 @@ namespace CppSharp.AST
         public TemplateParameterType(TemplateParameterType type)
             : base(type)
         {
-            Parameter = new TemplateParameter
+            Parameter = new TypeTemplateParameter
             {
                 Constraint = type.Parameter.Constraint,
-                IsTypeParameter = type.Parameter.IsTypeParameter,
                 Name = type.Parameter.Name
             };
             Depth = type.Depth;
@@ -778,6 +880,8 @@ namespace CppSharp.AST
             Class = type.Class;
         }
 
+        public QualifiedType InjectedSpecializationType { get; set; }
+
         public override T Visit<T>(ITypeVisitor<T> visitor,
                                    TypeQualifiers quals = new TypeQualifiers())
         {
@@ -819,6 +923,8 @@ namespace CppSharp.AST
             : base(type)
         {
         }
+
+        public QualifiedType Desugared { get; set; }
 
         public override T Visit<T>(ITypeVisitor<T> visitor,
                                    TypeQualifiers quals = new TypeQualifiers())
@@ -901,6 +1007,82 @@ namespace CppSharp.AST
         }
     }
 
+    public class UnaryTransformType : Type
+    {
+        public UnaryTransformType()
+        {
+        }
+
+        public UnaryTransformType(UnaryTransformType type)
+            : base(type)
+        {
+            Desugared = type.Desugared;
+            BaseType = type.BaseType;
+        }
+
+        public QualifiedType Desugared { get; set; }
+        public QualifiedType BaseType { get; set; }
+
+        public override T Visit<T>(ITypeVisitor<T> visitor, TypeQualifiers quals = new TypeQualifiers())
+        {
+            return visitor.VisitUnaryTransformType(this, quals);
+        }
+
+        public override object Clone()
+        {
+            return new UnaryTransformType(this);
+        }
+    }
+
+    public class VectorType : Type
+    {
+        public VectorType()
+        {
+        }
+
+        public VectorType(VectorType type)
+            : base(type)
+        {
+        }
+
+        public QualifiedType ElementType { get; set; }
+        public uint NumElements { get; set; }
+
+        public override T Visit<T>(ITypeVisitor<T> visitor, TypeQualifiers quals = new TypeQualifiers())
+        {
+            return visitor.VisitVectorType(this, quals);
+        }
+
+        public override object Clone()
+        {
+            return new VectorType(this);
+        }
+    }
+
+    public class UnsupportedType : Type
+    {
+        public UnsupportedType()
+        {
+        }
+
+        public UnsupportedType(UnsupportedType type)
+            : base(type)
+        {
+        }
+
+        public string Description;
+
+        public override T Visit<T>(ITypeVisitor<T> visitor, TypeQualifiers quals = new TypeQualifiers())
+        {
+            return visitor.VisitUnsupportedType(this, quals);
+        }
+
+        public override object Clone()
+        {
+            return new UnsupportedType(this);
+        }
+    }
+
     #region Primitives
 
     /// <summary>
@@ -914,6 +1096,8 @@ namespace CppSharp.AST
         WideChar,
         Char,
         UChar,
+        Char16,
+        Char32,
         Short,
         UShort,
         Int,
@@ -922,11 +1106,15 @@ namespace CppSharp.AST
         ULong,
         LongLong,
         ULongLong,
+        Int128,
+        UInt128,
+        Half,
         Float,
         Double,
+        LongDouble,
+        Float128,
         IntPtr,
         UIntPtr,
-        Char16
     }
 
     /// <summary>
@@ -1010,6 +1198,8 @@ namespace CppSharp.AST
         T VisitDecayedType(DecayedType decayed, TypeQualifiers quals);
         T VisitTemplateSpecializationType(TemplateSpecializationType template,
                                           TypeQualifiers quals);
+        T VisitDependentTemplateSpecializationType(
+            DependentTemplateSpecializationType template, TypeQualifiers quals);
         T VisitPrimitiveType(PrimitiveType type, TypeQualifiers quals);
         T VisitDeclaration(Declaration decl, TypeQualifiers quals);
         T VisitTemplateParameterType(TemplateParameterType param,
@@ -1021,6 +1211,9 @@ namespace CppSharp.AST
         T VisitDependentNameType(DependentNameType dependent,
             TypeQualifiers quals);
         T VisitPackExpansionType(PackExpansionType packExpansionType, TypeQualifiers quals);
+        T VisitUnaryTransformType(UnaryTransformType unaryTransformType, TypeQualifiers quals);
+        T VisitVectorType(VectorType vectorType, TypeQualifiers quals);
         T VisitCILType(CILType type, TypeQualifiers quals);
+        T VisitUnsupportedType(UnsupportedType type, TypeQualifiers quals);
     }
 }

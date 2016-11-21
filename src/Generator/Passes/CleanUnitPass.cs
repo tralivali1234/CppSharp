@@ -1,28 +1,35 @@
+using System.IO;
+using System.Linq;
 using CppSharp.AST;
 
 namespace CppSharp.Passes
 {
     public class CleanUnitPass : TranslationUnitPass
     {
-        public DriverOptions DriverOptions;
-
-        public CleanUnitPass(DriverOptions options)
-        {
-            DriverOptions = options;
-        }
-
         public override bool VisitTranslationUnit(TranslationUnit unit)
         {
-            if (IsExternalDeclaration(unit) && unit.IsGenerated)
-                unit.GenerationKind = GenerationKind.Link;
-                
-            // Try to get an include path that works from the original include
-            // directories paths.
-            if (unit.IsValid)
+            if (!base.VisitTranslationUnit(unit))
+                return false;
+
+            if (unit.IsSystemHeader)
             {
-                unit.IncludePath = GetIncludePath(unit.FilePath);
-                return true;
+                unit.Module = Options.SystemModule;
             }
+            else
+            {
+                var includeDir = Path.GetFullPath(Path.GetDirectoryName(unit.FilePath));
+                unit.Module = Options.Modules.FirstOrDefault(
+                    m => m.IncludeDirs.Any(i => Path.GetFullPath(i) == includeDir)) ??
+                    Options.MainModule;
+            }
+            unit.Module.Units.Add(unit);
+            // Try to get an include path that works from the original include directories paths
+            unit.IncludePath = GetIncludePath(unit.FilePath);
+            return true;
+        }
+
+        public override bool VisitDeclarationContext(DeclarationContext context)
+        {
             return false;
         }
 
@@ -31,9 +38,9 @@ namespace CppSharp.Passes
             var includePath = filePath;
             var shortestIncludePath = filePath;
 
-            for (uint i = 0; i < DriverOptions.IncludeDirsCount; ++i)
+            for (uint i = 0; i < Context.ParserOptions.IncludeDirsCount; ++i)
             {
-                var path = DriverOptions.getIncludeDirs(i);
+                var path = Context.ParserOptions.GetIncludeDirs(i);
 
                 int idx = filePath.IndexOf(path, System.StringComparison.Ordinal);
                 if (idx == -1)
@@ -50,25 +57,10 @@ namespace CppSharp.Passes
                     shortestIncludePath = inc;
             }
 
-            includePath = DriverOptions.IncludePrefix
+            includePath = Options.IncludePrefix
                 + shortestIncludePath.TrimStart(new char[] { '\\', '/' });
 
             return includePath.Replace('\\', '/');
-        }
-
-
-        bool IsExternalDeclaration(TranslationUnit translationUnit)
-        {
-            if (DriverOptions.NoGenIncludeDirs == null)
-                return false;
-
-            foreach (var path in DriverOptions.NoGenIncludeDirs)
-            {
-                if (translationUnit.FilePath.StartsWith(path))
-                    return true;
-            }
-
-            return false;
         }
     }
 }

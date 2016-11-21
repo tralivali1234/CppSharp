@@ -1,11 +1,19 @@
-CppSharp is a collection of libraries for working with C++ code from .NET.
+CppSharp is a collection of libraries for working with C++ code from
+high-level languages.
 
 It has multiple use cases, from parsing C++ code to automatically generating
-.NET bindings for wrapping C/C++ native code allowing interoperability with
-managed languages like C#.
+bindings for wrapping C/C++ native code allowing interoperability with
+high-level languages. The supported target languages at present are C#
+(hence the name of the project) and C++/CLI.
 
-This can be used to consume an existing native library in your managed code
-or add scripting support to a native codebase.
+This can be used to consume an existing native library in your high-level
+code or add scripting support to a native codebase.
+
+1. [Libraries](#libraries)
+2. [Documentation](#documentation)
+3. [Community](#community)
+4. [Support](#support)
+5. [Users](#users)
 
 ## Build Status
 
@@ -28,14 +36,15 @@ or add scripting support to a native codebase.
  * Virtual table overriding support
  * Multiple inheritance support
  * Easily extensible semantics via user passes 
- * Work-in-progress support for STL (C++/CLI only)
+ * Support for C++ standard library types (work-in-progress)
  * Strongly-typed customization APIs and type maps
+ * Default values of parameters (for target languages which support them)
 
 ### AST 
 
 Mirrors the Clang's C++ AST and type system classes in C# APIs.
 
-Check out [_Clang's AST introduction docs_](http://clang.llvm.org/docs/IntroductionToTheClangAST.html) if you're not familiar with the architecture. 
+Check out [_Clang's AST introduction docs_](http://clang.llvm.org/docs/IntroductionToTheClangAST.html) for more details about its architecture. 
  
  * C++ declarations
  * C++ types
@@ -64,17 +73,32 @@ Please see the following resources for more information:
 
 ## Community
 
+Feel free to open up issues on Github with any questions
+
 Mailing list: [Google group](https://groups.google.com/forum/#!forum/cppsharp-list)
-
-## News
-
-2nd, June 2015: We're having three students contributing to the project this summer,
-as part of Google Summer of Code.
-
-* Alexandre Esteves (@afesteves)
-* Dimitar Dobrev (@ddobrev)
-* Abhinav Tripathi (@genuinelucifer)
 
 ## Support
 
-For professional services related to building custom wrappers and consulting please contact @ddobrev (dpldobrev at yahoo dot com).
+For building wrappers and priority support please contact @ddobrev <&#100;&#112;&#108;&#100;&#111;&#98;&#114;&#101;&#118;&#64;&#112;&#114;&#111;&#116;&#111;&#110;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;>.
+
+## Users
+
+CppSharp is used by the following projects:
+
+[QtSharp](https://gitlab.com/ddobrev/QtSharp)
+
+[MonoGame](https://github.com/mono/MonoGame)
+
+[LLDBSharp](https://github.com/tritao/LLDBSharp)
+
+[Xamarin](http://xamarin.com/)
+
+[FFMPEG.net](https://github.com/crazyender/FFMPEG.net)
+
+[FFmpeg bindings](https://github.com/InitialForce/FFmpeg_bindings)
+
+[Tizen bindings](https://github.com/kitsilanosoftware/CppSharpTizen)
+
+[libgd bindings](https://github.com/imazen/deprecated-gd-bindings-generator-old)
+
+Please feel free to send us a pull request adding your own projects to the list above.

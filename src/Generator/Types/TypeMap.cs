@@ -15,9 +15,9 @@ namespace CppSharp.Types
     public class TypeMapAttribute : Attribute
     {
         public string Type { get; private set; }
-        public GeneratorKind? GeneratorKind { get; set; }
+        public GeneratorKind GeneratorKind { get; set; }
         
-        public TypeMapAttribute(string type)
+        public TypeMapAttribute(string type) : this(type, 0)
         {
             Type = type;
         }
@@ -67,12 +67,12 @@ namespace CppSharp.Types
             throw new NotImplementedException();
         }
 
-        public virtual void CSharpMarshalToNative(MarshalContext ctx)
+        public virtual void CSharpMarshalToNative(CSharpMarshalContext ctx)
         {
             throw new NotImplementedException();
         }
 
-        public virtual void CSharpMarshalToManaged(MarshalContext ctx)
+        public virtual void CSharpMarshalToManaged(CSharpMarshalContext ctx)
         {
             throw new NotImplementedException();
         }
@@ -152,7 +152,7 @@ namespace CppSharp.Types
                 var attrs = typeMap.GetCustomAttributes(typeof(TypeMapAttribute), true);
                 foreach (TypeMapAttribute attr in attrs)
                 {
-                    if (attr.GeneratorKind == null || attr.GeneratorKind == generatorKind)
+                    if (attr.GeneratorKind == 0 || attr.GeneratorKind == generatorKind)
                     {
                         TypeMaps[attr.Type] = typeMap;                        
                     }
@@ -165,11 +165,7 @@ namespace CppSharp.Types
             // We try to find type maps from the most qualified to less qualified
             // types. Example: '::std::vector', 'std::vector' and 'vector'
 
-            var typePrinter = new CppTypePrinter(this)
-                {
-                    PrintScopeKind = CppTypePrintScopeKind.GlobalQualified,
-                    PrintLogicalNames = true
-                };
+            var typePrinter = new CppTypePrinter { PrintLogicalNames = true };
 
             if (FindTypeMap(decl.Visit(typePrinter), out typeMap))
             {
@@ -191,17 +187,43 @@ namespace CppSharp.Types
                 return true;
             }
 
-            return false;
+            var specialization = decl as ClassTemplateSpecialization;
+            if (specialization != null &&
+                FindTypeMap(specialization.TemplatedDecl.Visit(typePrinter), out typeMap))
+            {
+                typeMap.Type = type;
+                return true;
+            }
+
+            var typedef = decl as TypedefDecl;
+            return typedef != null && FindTypeMap(typedef.Type, out typeMap);
         }
 
         public bool FindTypeMap(Type type, out TypeMap typeMap)
         {
-            var typePrinter = new CppTypePrinter(this);
+            var typePrinter = new CppTypePrinter
+            {
+                PrintTypeQualifiers = false,
+                PrintTypeModifiers = false,
+                PrintLogicalNames = true
+            };
 
             var template = type as TemplateSpecializationType;
             if (template != null)
-                return FindTypeMap(template.Template.TemplatedDecl, type,
-                    out typeMap);
+            {
+                var specialization = template.GetClassTemplateSpecialization();
+                if (specialization != null && FindTypeMap(specialization, type, out typeMap))
+                    return true;
+                if (template.Template.TemplatedDecl != null)
+                    return FindTypeMap(template.Template.TemplatedDecl, type,
+                        out typeMap);
+            }
+
+            if (FindTypeMap(type.Visit(typePrinter), out typeMap))
+            {
+                typeMap.Type = type;
+                return true;
+            }
 
             if (FindTypeMap(type.Visit(typePrinter), out typeMap))
             {
@@ -216,7 +238,8 @@ namespace CppSharp.Types
                 return true;
             }
 
-            return false;
+            var typedef = type as TypedefType;
+            return typedef != null && FindTypeMap(typedef.Declaration, type, out typeMap);
         }
 
         public bool FindTypeMap(Declaration decl, out TypeMap typeMap)

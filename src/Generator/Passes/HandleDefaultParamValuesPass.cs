@@ -21,7 +21,7 @@ namespace CppSharp.Passes
 
         public HandleDefaultParamValuesPass()
         {
-            Options.VisitFunctionParameters = false;
+            VisitOptions.VisitFunctionParameters = false;
         }
 
         public override bool VisitTranslationUnit(TranslationUnit unit)
@@ -37,16 +37,24 @@ namespace CppSharp.Passes
 
         public override bool VisitFunctionDecl(Function function)
         {
-            if (!base.VisitFunctionDecl(function))
+            if (!base.VisitFunctionDecl(function) || function.Ignore)
                 return false;
 
+            Generator.CurrentOutputNamespace = function.TranslationUnit.Module.OutputNamespace;
             var overloadIndices = new List<int>(function.Parameters.Count);
             foreach (var parameter in function.Parameters.Where(p => p.DefaultArgument != null))
             {
                 var result = parameter.DefaultArgument.String;
                 if (PrintExpression(parameter.Type, parameter.DefaultArgument, ref result) == null)
                     overloadIndices.Add(function.Parameters.IndexOf(parameter));
-                parameter.DefaultArgument.String = result;
+                if (string.IsNullOrEmpty(result))
+                {
+                    parameter.DefaultArgument = null;
+                    foreach (var p in function.Parameters.TakeWhile(p => p != parameter))
+                        p.DefaultArgument = null;
+                }
+                else
+                    parameter.DefaultArgument.String = result;
             }
 
             GenerateOverloads(function, overloadIndices);
@@ -58,7 +66,9 @@ namespace CppSharp.Passes
         {
             var desugared = type.Desugar();
 
-            if ((!Driver.Options.MarshalCharAsManagedChar &&
+            // constants are obtained through dynamic calls at present so they are not compile-time values in target languages
+            if (expression.Declaration is Variable ||
+                (!Options.MarshalCharAsManagedChar &&
                  desugared.IsPrimitiveType(PrimitiveType.UChar)) ||
                 type.IsPrimitiveTypeConvertibleToRef())
                 return null;
@@ -67,7 +77,14 @@ namespace CppSharp.Passes
                 return true;
 
             if (expression.Class == StatementClass.Call)
-                return expression.Declaration.Ignore ? false : (bool?) null;
+            {
+                if (expression.Declaration.Ignore)
+                {
+                    result = null;
+                    return false;
+                }
+                return null;
+            }
 
             var defaultConstruct = CheckForDefaultConstruct(desugared, expression, ref result);
             if (defaultConstruct != false)
@@ -81,7 +98,7 @@ namespace CppSharp.Passes
             return CheckFloatSyntax(desugared, expression, ref result) ||
                 CheckForBinaryOperator(desugared, expression, ref result) ||
                 CheckForEnumValue(desugared, expression, ref result) ||
-                CheckForDefaultEmptyChar(desugared, expression, ref result);
+                CheckForDefaultChar(desugared, ref result);
         }
 
         private bool CheckForDefaultPointer(Type desugared, ref string result)
@@ -103,7 +120,7 @@ namespace CppSharp.Passes
             if (desugared.GetFinalPointee().TryGetClass(out @class) && @class.IsValueType)
             {
                 result = string.Format("new {0}()",
-                    new CSharpTypePrinter(Driver).VisitClassDecl(@class));
+                    new CSharpTypePrinter(Context).VisitClassDecl(@class));
                 return true;
             }
 
@@ -124,13 +141,13 @@ namespace CppSharp.Passes
 
             TypeMap typeMap;
 
-            var typePrinter = new CSharpTypePrinter(Driver);
+            var typePrinter = new CSharpTypePrinter(Context);
             typePrinter.PushMarshalKind(CSharpMarshalKind.DefaultExpression);
             var typePrinterResult = type.Visit(typePrinter).Type;
-            if (Driver.TypeDatabase.FindTypeMap(decl, type, out typeMap))
+            if (TypeMaps.FindTypeMap(decl, type, out typeMap))
             {
                 var typeInSignature = typeMap.CSharpSignatureType(
-                    typePrinter.Context).SkipPointerRefs().Desugar();
+                    typePrinter.TypePrinterContext).SkipPointerRefs().Desugar();
                 Enumeration @enum;
                 if (typeInSignature.TryGetEnum(out @enum))
                 {
@@ -199,14 +216,14 @@ namespace CppSharp.Passes
                 switch (builtin.Type)
                 {
                     case PrimitiveType.Float:
-                        if (statement.String.EndsWith(".F"))
+                        if (statement.String.EndsWith(".F", System.StringComparison.Ordinal))
                         {
                             result = statement.String.Replace(".F", ".0F");
                             return true;
                         }
                         break;
                     case PrimitiveType.Double:
-                        if (statement.String.EndsWith("."))
+                        if (statement.String.EndsWith(".", System.StringComparison.Ordinal))
                         {
                             result = statement.String + '0';
                             return true;
@@ -242,10 +259,19 @@ namespace CppSharp.Passes
             var enumItem = statement.Declaration as Enumeration.Item;
             if (enumItem != null)
             {
-                result = string.Format("{0}{1}.{2}",
-                    desugared.IsPrimitiveType() ? "(int) " : string.Empty,
-                    new CSharpTypePrinter(Driver).VisitEnumDecl(
-                        (Enumeration) enumItem.Namespace), enumItem.Name);
+                if (desugared.IsPrimitiveType())
+                {
+                    statement.Declaration = null;
+                    result = string.Format("(int) {0}.{1}",
+                        new CSharpTypePrinter(Context).VisitEnumDecl(
+                            (Enumeration) enumItem.Namespace), enumItem.Name);
+                }
+                else
+                {
+                    result = string.Format("{0}.{1}",
+                        new CSharpTypePrinter(Context).VisitEnumDecl(
+                            (Enumeration) enumItem.Namespace), enumItem.Name);
+                }
                 return true;
             }
 
@@ -266,7 +292,7 @@ namespace CppSharp.Passes
             TypeMap typeMap;
             if ((function.Parameters.Count == 0 ||
                  HasSingleZeroArgExpression(function)) &&
-                Driver.TypeDatabase.FindTypeMap(desugared, out typeMap))
+                TypeMaps.FindTypeMap(desugared, out typeMap))
             {
                 var typeInSignature = typeMap.CSharpSignatureType(new CSharpTypePrinterContext
                 {
@@ -294,14 +320,15 @@ namespace CppSharp.Passes
                 ((BuiltinTypeExpression) defaultArgument).Value == 0;
         }
 
-        private bool CheckForDefaultEmptyChar(Type desugared, Statement statement,
-            ref string result)
+        private bool CheckForDefaultChar(Type desugared, ref string result)
         {
-            if (statement.String == "0" &&
-                Driver.Options.MarshalCharAsManagedChar &&
-                desugared.IsPrimitiveType(PrimitiveType.Char))
+            int value;
+            if (int.TryParse(result, out value) &&
+                ((Options.MarshalCharAsManagedChar &&
+                 desugared.IsPrimitiveType(PrimitiveType.Char)) ||
+                 desugared.IsPrimitiveType(PrimitiveType.WideChar)))
             {
-                result = "'\\0'";
+                result = value == 0 ? "'\\0'" : ("(char) " + result);
                 return true;
             }
 

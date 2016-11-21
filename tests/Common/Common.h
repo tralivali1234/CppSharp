@@ -1,10 +1,11 @@
-#include "../Tests.h"
+﻿#include "../Tests.h"
 #include "AnotherUnit.h"
 
 #ifdef _WIN32
 #include <vadefs.h>
 #endif
 #include <string>
+#include <vector>
 
 class DLL_API IgnoredType
 {
@@ -35,7 +36,7 @@ public:
     class NestedAbstract
     {
     public:
-        virtual void abstractFunctionInNestedClass() = 0;
+        virtual int* abstractFunctionInNestedClass() = 0;
     };
 
     Foo();
@@ -44,6 +45,7 @@ public:
     float B;
     IgnoredType ignoredType;
     int fixedArray[3];
+    char fixedCharArray[3];
     void* ptr;
     static const int unsafe;
     static const char charArray[];
@@ -82,10 +84,11 @@ struct DLL_API Bar
     Item RetItem1() const;
     int A;
     float B;
+    Item fixedEnumArray[3];
 
     Bar* returnPointerToValueType();
 
-    bool operator ==(const Bar& other) const;
+    bool operator ==(const Bar& arg1) const;
 };
 
 DLL_API bool operator ==(Bar::Item item, const Bar& bar);
@@ -142,6 +145,8 @@ enum Enum
     F = -9
 };
 
+typedef char TypedefChar;
+
 class DLL_API Hello
 {
     union NestedPrivate {
@@ -193,6 +198,8 @@ public:
     void StringOutRef(CS_OUT const char*& str);
     void StringInOut(CS_IN_OUT const char** str);
     void StringInOutRef(CS_IN_OUT const char*& str);
+
+    void StringTypedef(const TypedefChar* str);
 };
 
 class DLL_API AbstractFoo
@@ -206,7 +213,8 @@ public:
 class DLL_API ImplementsAbstractFoo : public AbstractFoo
 {
 public:
-    virtual int pureFunction(int i = 0);
+    typedef int typedefInOverride;
+    virtual int pureFunction(typedefInOverride i = 0);
     virtual int pureFunction1();
     virtual int pureFunction2(bool* ok = 0);
 };
@@ -232,7 +240,7 @@ typedef Exception Ex1;
 struct DerivedException;
 typedef DerivedException Ex2;
 
-struct DLL_API Exception
+struct DLL_API Exception : public Foo
 {
     virtual Ex1* clone() = 0;
 };
@@ -307,7 +315,7 @@ DLL_API TestMoveOperatorToClass operator+(const TestMoveOperatorToClass& b1,
 // Not a valid operator overload for Foo2 in managed code - comparison operators need to return bool.
 DLL_API int operator==(const Foo2& a, const Foo2& b)
 {
-	return 0;
+        return 0;
 }
 
 // Tests delegates
@@ -373,13 +381,13 @@ struct DLL_API TestStaticClass
 {
     static int Add(int a, int b);
 
-	static int GetOneTwoThree();
+        static int GetOneTwoThree();
 
 protected:
 
-	static int _Mult(int a, int b);
+        static int _Mult(int a, int b);
 
-	static int GetFourFiveSix();
+        static int GetFourFiveSix();
 
 private:
     TestStaticClass();
@@ -406,9 +414,9 @@ int TestStaticClassDerived::Foo() { return 0; }
 class DLL_API TestNotStaticClass
 {
 public:
-	static TestNotStaticClass StaticFunction();
+        static TestNotStaticClass StaticFunction();
 private:
-	TestNotStaticClass();
+        TestNotStaticClass();
 };
 
 TestNotStaticClass::TestNotStaticClass()
@@ -417,7 +425,7 @@ TestNotStaticClass::TestNotStaticClass()
 
 TestNotStaticClass TestNotStaticClass::StaticFunction()
 {
-	return TestNotStaticClass();
+        return TestNotStaticClass();
 }
 
 class HasIgnoredField
@@ -465,8 +473,8 @@ struct EmptyNamedNestedEnum
 typedef unsigned long foo_t;
 typedef struct DLL_API SomeStruct
 {
-	SomeStruct();
-	foo_t p;
+        SomeStruct();
+        foo_t p;
 } SomeStruct;
 
 SomeStruct::SomeStruct() : p(1) {}
@@ -477,11 +485,11 @@ class DLL_API SomeClassExtendingTheStruct : public SomeStruct
 
 namespace SomeNamespace
 {
-	class DLL_API AbstractClass
-	{
-	public:
-		virtual void AbstractMethod() = 0;
-	};
+        class DLL_API AbstractClass
+        {
+        public:
+                virtual void AbstractMethod() = 0;
+        };
 }
 
 // Test operator overloads
@@ -490,11 +498,11 @@ class DLL_API ClassWithOverloadedOperators
 public:
     ClassWithOverloadedOperators();
 
-	operator char();
-	operator int();
-	operator short();
+        operator char();
+        operator int();
+        operator short();
 
-	virtual bool operator<(const ClassWithOverloadedOperators &other) const;
+        virtual bool operator<(const ClassWithOverloadedOperators &other) const;
 };
 
 ClassWithOverloadedOperators::ClassWithOverloadedOperators() {}
@@ -552,6 +560,9 @@ public:
     foo_t operator[](TestProperties b);
     Bar& operator[](unsigned long i);
     Bar& operator[](const TypeMappedIndex& key);
+    // Test that we do not generate 'ref int' parameters as C# does not allow it
+    int operator[](CS_OUT char key);
+
 private:
     foo_t p;
     TestProperties f;
@@ -574,6 +585,11 @@ Bar& TestIndexedProperties::operator[](const TypeMappedIndex& key)
 {
     return bar;
 }
+int TestIndexedProperties::operator[](CS_OUT char key)
+{
+    return key;
+}
+
 
 struct DLL_API TestIndexedPropertiesInValueType
 {
@@ -586,8 +602,8 @@ int TestIndexedPropertiesInValueType::operator[](int i) { return i; }
 // Tests variables
 struct DLL_API TestVariables
 {
-	static int VALUE;
-	void SetValue(int value = VALUE);
+    static int VALUE;
+    void SetValue(int value = VALUE);
 };
 
 int TestVariables::VALUE;
@@ -597,11 +613,24 @@ typedef const wchar_t * LPCWSTR;
 struct DLL_API TestWideStrings
 {
     LPCWSTR GetWidePointer();
+    LPCWSTR GetWideNullPointer();
 };
 
 LPCWSTR TestWideStrings::GetWidePointer() { return L"Hello"; }
+LPCWSTR TestWideStrings::GetWideNullPointer() { return 0; }
 
 enum struct MyEnum { A, B, C };
+
+typedef void (*VoidPtrRetFunctionTypedef) ();
+
+class DLL_API TestFixedArrays
+{
+public:
+    TestFixedArrays();
+    VoidPtrRetFunctionTypedef Array[10];
+};
+
+TestFixedArrays::TestFixedArrays() {}
 
 class DLL_API TestArraysPointers
 {
@@ -626,7 +655,7 @@ int TestGetterSetterToProperties::getWidth() { return 640; }
 int TestGetterSetterToProperties::getHeight() { return 480; }
 
 // Tests conversion operators of classes
-class DLL_API ClassA 
+class DLL_API ClassA
 {
 public:
     ClassA(int value);
@@ -730,6 +759,7 @@ class DLL_API HasStdString
 public:
     std::string testStdString(std::string s);
     std::string s;
+    std::string& getStdString();
 };
 
 class DLL_API InternalCtorAmbiguity
@@ -803,10 +833,10 @@ void DLL_API funcTryRefTypeOut(CS_OUT RefTypeClassPassTry classTry);
 #define CS_VALUE_TYPE
 struct CS_VALUE_TYPE ValueTypeArrays
 {
-	float firstValueTypeArrray[ARRAY_LENGTH];
-	int secondValueTypeArray[ARRAY_LENGTH];
-	char thirdValueTypeArray[ARRAY_LENGTH];
-	size_t size;
+        float firstValueTypeArrray[ARRAY_LENGTH];
+        int secondValueTypeArray[ARRAY_LENGTH];
+        char thirdValueTypeArray[ARRAY_LENGTH];
+        size_t size;
 };
 
 class DLL_API HasVirtualProperty
@@ -858,27 +888,29 @@ public:
 class DLL_API BaseClassVirtual
 {
 public:
-    virtual int retInt();
+    typedef Foo Foo1;
+    virtual int retInt(const Foo1& foo);
     static BaseClassVirtual getBase();
 };
 
 class DLL_API DerivedClassVirtual : public BaseClassVirtual
 {
 public:
-    virtual int retInt();
+    typedef Foo Foo2;
+    virtual int retInt(const Foo2& foo);
 };
 
 class DLL_API DerivedClassAbstractVirtual : public DerivedClassVirtual
 {
 public:
-    virtual int retInt() = 0;
+    virtual int retInt(const Foo& foo) = 0;
 };
 
 class DLL_API DerivedClassOverrideAbstractVirtual : public DerivedClassAbstractVirtual
 {
 public:
     DerivedClassOverrideAbstractVirtual();
-    virtual int retInt();
+    virtual int retInt(const Foo& foo);
 };
 
 class DLL_API BufferForVirtualFunction : public BaseClassVirtual
@@ -891,7 +923,7 @@ class DLL_API OverridesNonDirectVirtual : public BufferForVirtualFunction
 {
 public:
     OverridesNonDirectVirtual();
-    virtual int retInt();
+    virtual int retInt(const Foo& foo);
 };
 
 namespace boost
@@ -940,6 +972,13 @@ namespace boost
     {
         typedef detail::swallow_assign type;
     };
+
+    template<class T>
+    struct is_class_or_union
+    {
+        template <class U>
+        static char is_class_or_union_tester(void(U::*)(void));
+    };
 }
 
 template <std::size_t N, std::size_t... I>
@@ -958,12 +997,6 @@ AbstractTemplate<T>::AbstractTemplate()
 {
 }
 
-/// Hash set/map base class.
-/** Note that to prevent extra memory use due to vtable pointer, %HashBase intentionally does not declare a virtual destructor
-and therefore %HashBase pointers should never be used.
-*/
-class DLL_API TestComments {};
-
 class DLL_API AbstractWithVirtualDtor
 {
 public:
@@ -971,3 +1004,216 @@ public:
     virtual ~AbstractWithVirtualDtor();
     virtual void abstract() = 0;
 };
+
+class DLL_API NonTrivialDtorBase
+{
+public:
+    NonTrivialDtorBase();
+    ~NonTrivialDtorBase();
+};
+
+class DLL_API NonTrivialDtor : public NonTrivialDtorBase
+{
+public:
+    NonTrivialDtor();
+    ~NonTrivialDtor();
+    static bool getDtorCalled();
+    static void setDtorCalled(bool value);
+private:
+    static bool dtorCalled;
+};
+
+// HACK: do not move these to the cpp - C++/CLI is buggy and cannot link static fields initialised in the cpp
+bool NonTrivialDtor::dtorCalled = false;
+
+bool NonTrivialDtor::getDtorCalled()
+{
+    return true;
+}
+
+void NonTrivialDtor::setDtorCalled(bool value)
+{
+    dtorCalled = true;
+}
+
+template <class T> class ForwardedTemplate;
+
+ForwardedTemplate<int> returnsForwardedTemplate();
+
+template <class T> class ForwardedTemplate
+{
+    ForwardedTemplate<T> functionInForwardedTemplate() const;
+};
+
+template <class T>
+ForwardedTemplate<T> ForwardedTemplate<T>::functionInForwardedTemplate() const
+{
+    return ForwardedTemplate<T>();
+}
+
+template <typename T>
+class TemplateWithVirtual
+{
+public:
+    TemplateWithVirtual();
+    virtual void v();
+};
+
+template <class T>
+TemplateWithVirtual<T>::TemplateWithVirtual()
+{
+}
+
+template <class T>
+void TemplateWithVirtual<T>::v()
+{
+}
+
+template <typename T>
+int FunctionTemplateWithDependentTypeDefaultExpr(size_t size = sizeof(T)) {
+        return size;
+}
+
+class DLL_API DerivedFromTemplateInstantiationWithVirtual : public TemplateWithVirtual<int>
+{
+public:
+    DerivedFromTemplateInstantiationWithVirtual();
+};
+
+typedef union
+{
+    int c;
+} union_t;
+
+int DLL_API func_union(union_t u)
+{
+    return u.c;
+}
+
+class DLL_API HasProtectedEnum
+{
+public:
+    HasProtectedEnum();
+protected:
+    enum class ProtectedEnum
+    {
+        Member1,
+        Member2
+    };
+    void function(ProtectedEnum param);
+};
+
+using custom_int_t = int;
+DLL_API void FuncWithTypeAlias(custom_int_t i);
+
+template<typename T>
+using TypeAliasTemplate = TemplateWithVirtual<T>;
+DLL_API void FuncWithTemplateTypeAlias(TypeAliasTemplate<int> i);
+
+struct TestsTypes
+{
+    int(*FunctionNoProto)();
+};
+
+template <class T>
+struct SpecialisesVoid
+{
+private:
+    T t;
+};
+
+template <class T>
+class SpecialisesVoidInUnion
+{
+    union {
+        SpecialisesVoid<T>* e;
+    }* u;
+};
+
+class UsesSpecialisationOfVoid
+{
+private:
+    SpecialisesVoid<void>* s;
+    SpecialisesVoidInUnion<void>* h;
+    SpecialisesVoid<int> i;
+    SpecialisesVoid<long> l;
+    SpecialisesVoid<unsigned int> u;
+};
+
+class DLL_API HasAbstractOperator
+{
+public:
+    virtual bool operator==(const HasAbstractOperator& other) = 0;
+};
+
+template<size_t _Len, class _Ty>
+struct _Aligned;
+
+template<size_t _Len>
+struct _Aligned<_Len, int>
+{
+    typedef int type;
+};
+
+template<size_t _Len>
+struct _Aligned<_Len, char>
+{
+    typedef typename _Aligned<_Len, int>::type type;
+};
+
+typedef _Aligned<16, char>::type type;
+
+template <typename T, template <typename> class InteriorRings = SpecialisesVoid>
+struct polygon
+{
+    InteriorRings<T> interior_rings;
+};
+
+class HasSystemBase : public std::string
+{
+};
+
+typedef SpecialisesVoid<std::vector<std::string>> SpecialisesWithNestedSystemTypes;
+
+struct HasLongDoubles
+{
+    long double simple;
+    long double array[4];
+};
+
+enum
+{
+    EmptyEnumsWithSameMemberPrefix1,
+    EmptyEnumsWithSameMemberPrefix2
+};
+
+enum
+{
+    EmptyEnumsWithSameMemberPrefix3,
+    EmptyEnumsWithSameMemberPrefix4
+};
+
+enum
+{
+    EmptyEnumsWithSameMemberPrefixAndUnderscore_1,
+    EmptyEnumsWithSameMemberPrefixAndUnderscore_2
+};
+
+enum
+{
+    EmptyEnumsWithSameMemberPrefixAndUnderscore_3,
+    EmptyEnumsWithSameMemberPrefixAndUnderscore_4
+};
+
+class DLL_API HasOverloadsWithDifferentPointerKindsToSameType
+{
+public:
+    HasOverloadsWithDifferentPointerKindsToSameType();
+    ~HasOverloadsWithDifferentPointerKindsToSameType();
+    void overload(int& i);
+    void overload(int&& i);
+    void overload(const int& i);
+};
+
+DLL_API void hasPointerParam(Foo* foo, int i);
+DLL_API void hasPointerParam(const Foo& foo);

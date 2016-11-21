@@ -89,10 +89,10 @@ namespace CppSharp.AST
             return null;
         }
 
-        public static bool HasNonAbstractBaseMethodInPrimaryBase(this Class @class, Method method)
+        public static bool HasCallableBaseMethodInPrimaryBase(this Class @class, Method method)
         {
             var baseMethod = @class.GetBaseMethod(method, true, true);
-            return baseMethod != null && !baseMethod.IsPure &&
+            return baseMethod != null && !baseMethod.IsPure && baseMethod.IsGenerated &&
                 !((Class) baseMethod.OriginalNamespace).IsInterface;
         }
 
@@ -199,30 +199,9 @@ namespace CppSharp.AST
             return hasRefBase;
         }
 
-        private static bool ComputeClassPath(this Class current, Class target,
-            IList<BaseClassSpecifier> path)
+        public static IEnumerable<TranslationUnit> GetGenerated(this IEnumerable<TranslationUnit> units)
         {
-            if (target == current)
-                return true;
-
-            foreach (var @base in current.Bases)
-            {
-                path.Add(@base);
-
-                var @class = @base.Class.OriginalClass ?? @base.Class;
-                if (@class != current && @class.ComputeClassPath(target, path))
-                    return false;
-            }
-
-            path.RemoveAt(path.Count - 1);
-            return false;
-        }
-
-        public static int ComputeNonVirtualBaseClassOffsetTo(this Class from, Class to)
-        {
-            var path = new List<BaseClassSpecifier>();
-            @from.ComputeClassPath(to, path);
-            return path.Sum(@base => @base.Offset);
+            return units.Where(u => u.IsGenerated && (u.HasDeclarations || u.IsSystemHeader) && u.IsValid);
         }
     }
 }

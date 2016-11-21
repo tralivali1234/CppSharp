@@ -19,23 +19,9 @@ objsdir = path.join(builddir, "obj", "%{cfg.buildcfg}_%{cfg.platform}");
 libdir = path.join(builddir, "lib", "%{cfg.buildcfg}_%{cfg.platform}");
 gendir = path.join(builddir, "gen");
 
-common_flags = { "Unicode", "Symbols" }
 msvc_buildflags = { "/wd4267" }
-gcc_buildflags = { "-std=c++11 -fpermissive" }
 
 msvc_cpp_defines = { }
-
-function os.is_osx()
-  return os.is("macosx")
-end
-
-function os.is_windows()
-  return os.is("windows")
-end
-
-function os.is_linux()
-  return os.is("linux")
-end
 
 function string.starts(str, start)
    return string.sub(str, 1, string.len(start)) == start
@@ -46,7 +32,7 @@ function SafePath(path)
 end
 
 function SetupNativeProject()
-  location (path.join(builddir, "projects"))
+  location ("%{wks.location}/projects")
 
   local c = configuration "Debug"
     defines { "DEBUG" }
@@ -63,10 +49,13 @@ function SetupNativeProject()
 
   configuration { "gmake" }
     buildoptions { gcc_buildflags }
-    
-  configuration { "macosx" }
+
+  filter { "system:macosx", "language:C++" }
     buildoptions { gcc_buildflags, "-stdlib=libc++" }
     links { "c++" }
+
+  filter { "system:not windows", "language:C++" }
+    buildoptions { "-fpermissive -std=c++11" }
   
   -- OS-specific options
   
@@ -78,20 +67,43 @@ end
 
 function SetupManagedProject()
   language "C#"
-  location (path.join(builddir, "projects"))
+  location ("%{wks.location}/projects")
 
-  if not os.is_osx() then
+  if not os.is("macosx") then
     local c = configuration { "vs*" }
       location "."
     configuration(c)
   end
+
+  if action == "vs2015" then
+
+  configuration "vs2015"
+    framework "4.6"
+
+  end
+
+  configuration "vs2013"
+    framework "4.5"
+
+  configuration "vs2012"
+    framework "4.5"
+
+  configuration {}
 end
 
 function IncludeDir(dir)
   local deps = os.matchdirs(dir .. "/*")
   
   for i,dep in ipairs(deps) do
-    local fp = path.join(dep, "premake4.lua")
+    local fp = path.join(dep, "premake5.lua")
+    fp = path.join(os.getcwd(), fp)
+    
+    if os.isfile(fp) then
+      include(dep)
+      return
+    end    
+
+    fp = path.join(dep, "premake4.lua")
     fp = path.join(os.getcwd(), fp)
     
     if os.isfile(fp) then

@@ -10,7 +10,10 @@ public class CommonTests : GeneratorTestFixture
     [Test]
     public void TestCodeGeneration()
     {
-        Assert.That(new ChangedAccessOfInheritedProperty().Property, Is.EqualTo(2));
+#pragma warning disable 0168 // warning CS0168: The variable `foo' is declared but never used
+#pragma warning disable 0219 // warning CS0219: The variable `foo' is assigned but its value is never used
+
+        Assert.That(new ChangedAccessOfInheritedProperty().property, Is.EqualTo(2));
         Foo.NestedAbstract a;
         var renamedEmptyEnum = Foo.RenamedEmptyEnum.EmptyEnum1;
         using (var foo = new Foo())
@@ -20,8 +23,20 @@ public class CommonTests : GeneratorTestFixture
         }
         using (var overridesNonDirectVirtual = new OverridesNonDirectVirtual())
         {
-            Assert.That(overridesNonDirectVirtual.retInt(), Is.EqualTo(3));
+            using (var foo = new Foo())
+            {
+                Assert.That(overridesNonDirectVirtual.retInt(foo), Is.EqualTo(3));
+            }
         }
+        using (var derivedFromTemplateInstantiationWithVirtual = new DerivedFromTemplateInstantiationWithVirtual())
+        {
+        }
+        using (var hasProtectedEnum = new HasProtectedEnum())
+        {
+        }
+
+#pragma warning restore 0168
+#pragma warning restore 0219
     }
 
     [Test]
@@ -91,6 +106,7 @@ public class CommonTests : GeneratorTestFixture
         str = "Hello";
         hello.StringInOutRef(ref str);
         Assert.That(str, Is.EqualTo("StringInOutRef"));
+        hello.StringTypedef(str);
     }
 
     [Test]
@@ -185,6 +201,11 @@ public class CommonTests : GeneratorTestFixture
         var def = new DefaultParameters();
         def.Foo(1, 2);
         def.Bar();
+        using (Foo foo = new Foo())
+        {
+            common.hasPointerParam(foo, 0);
+            common.hasPointerParam(foo);
+        }
     }
 
     [Test]
@@ -200,9 +221,9 @@ public class CommonTests : GeneratorTestFixture
     public void TestAbstractReturnType()
     {
         var returnsAbstractFoo = new ReturnsAbstractFoo();
-        var abstractFoo = returnsAbstractFoo.Foo;
+        var abstractFoo = returnsAbstractFoo.foo;
         Assert.AreEqual(abstractFoo.pureFunction(1), 5);
-        Assert.AreEqual(abstractFoo.pureFunction1(), 10);
+        Assert.AreEqual(abstractFoo.pureFunction1, 10);
         var ok = false;
         Assert.AreEqual(abstractFoo.pureFunction2(ref ok), 15);
     }
@@ -248,7 +269,7 @@ public class CommonTests : GeneratorTestFixture
     public void TestMethodWithFixedInstance()
     {
         var bar = new Bar2 { A = 1, B = 2, C = 3 };
-        Foo2 foo = bar.needFixedInstance();
+        Foo2 foo = bar.needFixedInstance;
         Assert.AreEqual(foo.A, 1);
         Assert.AreEqual(foo.B, 2);
         Assert.AreEqual(foo.C, 3);
@@ -303,8 +324,8 @@ public class CommonTests : GeneratorTestFixture
     {
         Assert.That(TestStaticClass.Add(1, 2), Is.EqualTo(3));
         Assert.That(TestStaticClass.OneTwoThree, Is.EqualTo(123));
-        Assert.That(TestStaticClassDerived.Foo(), Is.EqualTo(0));
-        TestNotStaticClass.StaticFunction();
+        Assert.That(TestStaticClassDerived.Foo, Is.EqualTo(0));
+        TestNotStaticClass.StaticFunction.GetHashCode();
     }
 
     [Test]
@@ -327,7 +348,7 @@ public class CommonTests : GeneratorTestFixture
         Foo2 foo2 = new Foo2();
         for (char c = char.MinValue; c <= sbyte.MaxValue; c++)
             Assert.That(foo2.testCharMarshalling(c), Is.EqualTo(c));
-        Assert.Catch<ArgumentException>(() => foo2.testCharMarshalling('ж'));
+        Assert.Catch<OverflowException>(() => foo2.testCharMarshalling('ж'));
     }
 
     [Test]
@@ -371,8 +392,10 @@ public class CommonTests : GeneratorTestFixture
     [Test]
     public void TestFunctions()
     {
-        var ret = common.Function();
+        var ret = common.Function;
         Assert.That(ret, Is.EqualTo(5));
+
+        common.FuncWithTypeAlias(0);
     }
 
     [Test]
@@ -386,9 +409,9 @@ public class CommonTests : GeneratorTestFixture
 
         // Test getter/setter property
         prop.Field = 20;
-        Assert.That(prop.FieldValue, Is.EqualTo(20));
-        prop.FieldValue = 10;
-        Assert.That(prop.FieldValue, Is.EqualTo(10));
+        Assert.That(prop.fieldValue, Is.EqualTo(20));
+        prop.fieldValue = 10;
+        Assert.That(prop.fieldValue, Is.EqualTo(10));
     }
 
     [Test]
@@ -396,7 +419,7 @@ public class CommonTests : GeneratorTestFixture
     {
         // Test field property
         var @var = new TestVariables();
-        @var.Value = 10;
+        @var.SetValue(10);
         Assert.That(TestVariables.VALUE, Is.EqualTo(10));
     }
 
@@ -406,6 +429,7 @@ public class CommonTests : GeneratorTestFixture
         var ws = new TestWideStrings();
         var s = ws.WidePointer;
         Assert.That(ws.WidePointer, Is.EqualTo("Hello"));
+        Assert.That(ws.WideNullPointer, Is.EqualTo(null));
     }
 
     [Test]
@@ -420,8 +444,8 @@ public class CommonTests : GeneratorTestFixture
     public unsafe void TestGetterSetterToProperties()
     {
         var @class = new TestGetterSetterToProperties();
-        Assert.That(@class.Width, Is.EqualTo(640));
-        Assert.That(@class.Height, Is.EqualTo(480));
+        Assert.That(@class.width, Is.EqualTo(640));
+        Assert.That(@class.height, Is.EqualTo(480));
     }
 
     [Test]
@@ -437,14 +461,14 @@ public class CommonTests : GeneratorTestFixture
     [Test]
     public unsafe void TestDecltype()
     {
-        var ret = common.TestDecltype();
+        var ret = common.TestDecltype;
         Assert.AreEqual(0, ret);
     }
 
     [Test]
     public unsafe void TestNullPtrType()
     {
-        var ret = common.TestNullPtrTypeRet();
+        var ret = common.TestNullPtrTypeRet;
         Assert.AreEqual(IntPtr.Zero, new IntPtr(ret));
     }
 
@@ -478,7 +502,7 @@ public class CommonTests : GeneratorTestFixture
     public void TestGetAnonymousDelegate()
     {
         var testDelegates = new TestDelegates();
-        var @delegate = testDelegates.MarshalAnonymousDelegate4();
+        var @delegate = testDelegates.MarshalAnonymousDelegate4;
         int value = @delegate.Invoke(1);
         Assert.AreEqual(2, value);
     }
@@ -502,6 +526,8 @@ public class CommonTests : GeneratorTestFixture
     [Test]
     public void TestEqualityOperator()
     {
+#pragma warning disable 1718 // Comparison made to same variable; did you mean to compare something else?
+
         using (var foo = new Foo { A = 5, B = 5.5f })
         {
             Assert.IsTrue(foo == foo);
@@ -518,6 +544,8 @@ public class CommonTests : GeneratorTestFixture
         {
             Assert.IsTrue(differentConstOverloads != null);
         }
+
+#pragma warning restore 1718
     }
 
     [Test]
@@ -525,8 +553,8 @@ public class CommonTests : GeneratorTestFixture
     {
         HasFriend h1 = 5;
         HasFriend h2 = 10;
-        Assert.AreEqual(15, (h1 + h2).M);
-        Assert.AreEqual(-5, (h1 - h2).M);
+        Assert.AreEqual(15, (h1 + h2).m);
+        Assert.AreEqual(-5, (h1 - h2).m);
     }
 
     [Test]
@@ -546,7 +574,7 @@ public class CommonTests : GeneratorTestFixture
     [Test]
     public void TestMarshallingEmptyType()
     {
-        var empty = new ReturnsEmpty().Empty;
+        var empty = new ReturnsEmpty().empty;
     }
 
     [Test]
@@ -566,7 +594,7 @@ public class CommonTests : GeneratorTestFixture
     {
         using (var hasVirtualReturningHasProblematicFields = new HasVirtualReturningHasProblematicFields())
         {
-            var hasProblematicFields = hasVirtualReturningHasProblematicFields.returnsProblematicFields();
+            var hasProblematicFields = hasVirtualReturningHasProblematicFields.returnsProblematicFields;
             Assert.That(hasProblematicFields.b, Is.EqualTo(false));
             hasProblematicFields.b = true;
             Assert.That(hasProblematicFields.b, Is.EqualTo(true));
@@ -599,11 +627,62 @@ public class CommonTests : GeneratorTestFixture
         }
     }
 
+    [Test]
+    public void TestNonTrivialDtorInvocation()
+    {
+        using (var nonTrivialDtor = new NonTrivialDtor())
+        {
+        }
+        Assert.IsTrue(NonTrivialDtor.dtorCalled);
+    }
+
+    [Test]
+    public void TestFixedCharArray()
+    {
+        using (var foo = new Foo())
+        {
+            foo.fixedCharArray = new char[] { 'a', 'b', 'c' };
+            Assert.That(foo.fixedCharArray[0], Is.EqualTo('a'));
+            Assert.That(foo.fixedCharArray[1], Is.EqualTo('b'));
+            Assert.That(foo.fixedCharArray[2], Is.EqualTo('c'));
+        }
+    }
+
+    [Test, Ignore("We need symbols for std::string to invoke and auto-compilation of exported templates is not added yet.")]
+    public void TestStdString()
+    {
+        // when C++ memory is deleted, it's only marked as free but not immediadely freed
+        // this can hide memory bugs while marshalling
+        // so let's use a long string to increase the chance of a crash right away
+        const string t = @"This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. 
+This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string.
+This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string.
+This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string.
+This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string.
+This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string. This is a very long string.";
+        using (var hasStdString = new HasStdString())
+        {
+            Assert.That(hasStdString.testStdString(t), Is.EqualTo(t + "_test"));
+            hasStdString.s = t;
+            Assert.That(hasStdString.s, Is.EqualTo(t));
+            Assert.That(hasStdString.stdString, Is.EqualTo(t));
+            Assert.That(hasStdString.stdString, Is.EqualTo(t));
+        }
+    }
+
     private class CustomDerivedFromVirtual : AbstractWithVirtualDtor
     {
         public override void @abstract()
         {
         }
     }
+
+    [Test]
+    public void TestFuncWithUnionParam()
+    {
+        var ut = new union_t();
+        ut.c = 20;
+        var v = common.func_union(ut);
+        Assert.AreEqual(20, v);
+    }
 }
- 

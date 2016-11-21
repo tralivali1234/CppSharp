@@ -80,9 +80,9 @@ Bar* Bar::returnPointerToValueType()
     return this;
 }
 
-bool Bar::operator ==(const Bar& other) const
+bool Bar::operator ==(const Bar& arg1) const
 {
-    return A == other.A && B == other.B;
+    return A == arg1.A && B == arg1.B;
 }
 
 bool operator ==(Bar::Item item, const Bar& bar)
@@ -234,40 +234,44 @@ void Hello::EnumOutRef(int value, CS_OUT Enum& e)
 
 void Hello::EnumInOut(CS_IN_OUT Enum* e)
 {
-	if (*e == Enum::E)
-		*e = Enum::F;
+        if (*e == Enum::E)
+                *e = Enum::F;
 }
 
 void Hello::EnumInOutRef(CS_IN_OUT Enum& e)
 {
-	if (e == Enum::E)
-		e = Enum::F;
+        if (e == Enum::E)
+                e = Enum::F;
 }
 
 void Hello::StringOut(CS_OUT const char** str)
 {
-	*str = "HelloStringOut";
+        *str = "HelloStringOut";
 }
 
 void Hello::StringOutRef(CS_OUT const char*& str)
 {
-	str = "HelloStringOutRef";
+        str = "HelloStringOutRef";
 }
 
 void Hello::StringInOut(CS_IN_OUT const char** str)
 {
-	if (strcmp(*str, "Hello") == 0)
-		*str = "StringInOut";
-	else
-		*str = "Failed";
+        if (strcmp(*str, "Hello") == 0)
+                *str = "StringInOut";
+        else
+                *str = "Failed";
 }
 
 void Hello::StringInOutRef(CS_IN_OUT const char*& str)
 {
-	if (strcmp(str, "Hello") == 0)
-		str = "StringInOutRef";
-	else
-		str = "Failed";
+        if (strcmp(str, "Hello") == 0)
+                str = "StringInOutRef";
+        else
+                str = "Failed";
+}
+
+void Hello::StringTypedef(const TypedefChar* str)
+{
 }
 
 int unsafeFunction(const Bar& ret, char* testForString, void (*foo)(int))
@@ -305,7 +309,7 @@ int TestDelegates::CDecl(DelegateCDecl del)
     return del(1);
 }
 
-int ImplementsAbstractFoo::pureFunction(int i)
+int ImplementsAbstractFoo::pureFunction(typedefInOverride i)
 {
     return 5;
 }
@@ -426,6 +430,11 @@ std::string HasStdString::testStdString(std::string s)
     return s + "_test";
 }
 
+std::string& HasStdString::getStdString()
+{
+    return s;
+}
+
 TypeMappedIndex::TypeMappedIndex()
 {
 }
@@ -540,26 +549,26 @@ HasProblematicFields HasVirtualReturningHasProblematicFields::returnsProblematic
     return HasProblematicFields();
 }
 
-int BaseClassVirtual::retInt()
+int BaseClassVirtual::retInt(const Foo1& foo)
 {
-	return 1;
+    return 1;
 }
 
 BaseClassVirtual BaseClassVirtual::getBase()
 {
-	return DerivedClassVirtual();
+    return DerivedClassVirtual();
 }
 
-int DerivedClassVirtual::retInt()
+int DerivedClassVirtual::retInt(const Foo2& foo)
 {
-	return 2;
+    return 2;
 }
 
 DerivedClassOverrideAbstractVirtual::DerivedClassOverrideAbstractVirtual()
 {
 }
 
-int DerivedClassOverrideAbstractVirtual::retInt()
+int DerivedClassOverrideAbstractVirtual::retInt(const Foo& foo)
 {
     return 1;
 }
@@ -572,7 +581,7 @@ OverridesNonDirectVirtual::OverridesNonDirectVirtual()
 {
 }
 
-int OverridesNonDirectVirtual::retInt()
+int OverridesNonDirectVirtual::retInt(const Foo& foo)
 {
     return 3;
 }
@@ -582,5 +591,72 @@ AbstractWithVirtualDtor::AbstractWithVirtualDtor()
 }
 
 AbstractWithVirtualDtor::~AbstractWithVirtualDtor()
+{
+}
+
+NonTrivialDtorBase::NonTrivialDtorBase()
+{
+}
+
+NonTrivialDtorBase::~NonTrivialDtorBase()
+{
+}
+
+NonTrivialDtor::NonTrivialDtor()
+{
+    dtorCalled = false;
+}
+
+NonTrivialDtor::~NonTrivialDtor()
+{
+    dtorCalled = true;
+}
+
+DerivedFromTemplateInstantiationWithVirtual::DerivedFromTemplateInstantiationWithVirtual()
+{
+}
+
+HasProtectedEnum::HasProtectedEnum()
+{
+}
+
+void HasProtectedEnum::function(ProtectedEnum param)
+{
+}
+
+void FuncWithTypeAlias(custom_int_t i)
+{
+}
+
+void FuncWithTemplateTypeAlias(TypeAliasTemplate<int> i)
+{
+
+}
+
+HasOverloadsWithDifferentPointerKindsToSameType::HasOverloadsWithDifferentPointerKindsToSameType()
+{
+}
+
+HasOverloadsWithDifferentPointerKindsToSameType::~HasOverloadsWithDifferentPointerKindsToSameType()
+{
+}
+
+void HasOverloadsWithDifferentPointerKindsToSameType::overload(int& i)
+{
+}
+
+void HasOverloadsWithDifferentPointerKindsToSameType::overload(int&& i)
+{
+}
+
+void HasOverloadsWithDifferentPointerKindsToSameType::overload(const int& i)
+{
+}
+
+void hasPointerParam(Foo* foo, int i)
+{
+}
+
+void hasPointerParam(const Foo& foo)
 {
 }
