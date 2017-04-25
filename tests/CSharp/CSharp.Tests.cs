@@ -214,6 +214,7 @@ public unsafe class CSharpTests : GeneratorTestFixture
             Assert.That(methodsWithDefaultValues.DefaultMappedToEnum(), Is.EqualTo(Flags.Flag3));
             methodsWithDefaultValues.DefaultMappedToZeroEnum();
             methodsWithDefaultValues.DefaultMappedToEnumAssignedWithCtor();
+            methodsWithDefaultValues.DefaultZeroMappedToEnumAssignedWithCtor();
             methodsWithDefaultValues.DefaultImplicitCtorInt();
             methodsWithDefaultValues.DefaultImplicitCtorChar();
             methodsWithDefaultValues.DefaultImplicitCtorFoo();
@@ -320,17 +321,23 @@ public unsafe class CSharpTests : GeneratorTestFixture
     {
         IntPtr native1;
         IntPtr native2;
+        var hasVirtualDtor1Map = (IDictionary<IntPtr, HasVirtualDtor1>) typeof(
+            HasVirtualDtor1).GetField("NativeToManagedMap",
+            BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+        var hasVirtualDtor2Map = (IDictionary<IntPtr, HasVirtualDtor2>) typeof(
+            HasVirtualDtor2).GetField("NativeToManagedMap",
+            BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
         using (var testNativeToManagedMap = new TestNativeToManagedMap())
         {
             var hasVirtualDtor2 = testNativeToManagedMap.HasVirtualDtor2;
             native2 = hasVirtualDtor2.__Instance;
             native1 = hasVirtualDtor2.HasVirtualDtor1.__Instance;
-            Assert.IsTrue(HasVirtualDtor2.NativeToManagedMap.ContainsKey(native2));
-            Assert.IsTrue(HasVirtualDtor1.NativeToManagedMap.ContainsKey(native1));
+            Assert.IsTrue(hasVirtualDtor1Map.ContainsKey(native1));
+            Assert.IsTrue(hasVirtualDtor2Map.ContainsKey(native2));
             Assert.AreSame(hasVirtualDtor2, testNativeToManagedMap.HasVirtualDtor2);
         }
-        Assert.IsFalse(HasVirtualDtor2.NativeToManagedMap.ContainsKey(native2));
-        Assert.IsFalse(HasVirtualDtor1.NativeToManagedMap.ContainsKey(native1));
+        Assert.IsFalse(hasVirtualDtor1Map.ContainsKey(native1));
+        Assert.IsFalse(hasVirtualDtor2Map.ContainsKey(native2));
     }
 
     [Test]
@@ -338,12 +345,15 @@ public unsafe class CSharpTests : GeneratorTestFixture
     {
         using (var testNativeToManagedMap = new TestNativeToManagedMap())
         {
+            var quxMap = (IDictionary<IntPtr, IQux>) typeof(
+                Qux).GetField("NativeToManagedMap",
+                BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
             var bar = new Bar();
             testNativeToManagedMap.PropertyWithNoVirtualDtor = bar;
             Assert.AreSame(bar, testNativeToManagedMap.PropertyWithNoVirtualDtor);
-            Assert.IsTrue(Qux.NativeToManagedMap.ContainsKey(bar.__Instance));
+            Assert.IsTrue(quxMap.ContainsKey(bar.__Instance));
             bar.Dispose();
-            Assert.IsFalse(Qux.NativeToManagedMap.ContainsKey(bar.__Instance));
+            Assert.IsFalse(quxMap.ContainsKey(bar.__Instance));
         }
     }
 
@@ -541,8 +551,7 @@ public unsafe class CSharpTests : GeneratorTestFixture
         //Assert.That(CSharp.HasFreeConstant.AnotherUnit.STD_STRING_CONSTANT, Is.EqualTo("test"));
     }
 
-    // HACK: the completion of types is temporarily suspended because of problems with QtWidgets
-    [Test, Ignore]
+    [Test, Ignore("The completion of types is temporarily suspended because of problems with QtWidgets.")]
     public void TestTemplateInternals()
     {
         foreach (var internalType in new[]
@@ -600,7 +609,7 @@ public unsafe class CSharpTests : GeneratorTestFixture
         }
     }
 
-    [Test, Ignore("For no reason this doesn't work at all, and I am tired of bugs. I fixed the compilation of this thing, I have no intention of fixing it at run-time too.")]
+    [Test]
     public void TestUnicode()
     {
         using (var testString = new TestString())
@@ -641,7 +650,7 @@ public unsafe class CSharpTests : GeneratorTestFixture
             using (var missingObjectOnVirtualCall = new MissingObjectOnVirtualCall())
             {
                 hasMissingObjectOnVirtualCall.SetMissingObjectOnVirtualCall(missingObjectOnVirtualCall);
-                hasMissingObjectOnVirtualCall.MakeMissingObjectOnVirtualCall();
+                Assert.That(hasMissingObjectOnVirtualCall.MakeMissingObjectOnVirtualCall(), Is.EqualTo(15));
             }
         }
     }
@@ -655,6 +664,17 @@ public unsafe class CSharpTests : GeneratorTestFixture
             Assert.That(implementsAbstractsFromPrimaryAndSecondary.AbstractInSecondaryBase, Is.EqualTo(5));
             Assert.That(implementsAbstractsFromPrimaryAndSecondary.AbstractReturnsFieldInPrimaryBase, Is.EqualTo(201));
             Assert.That(implementsAbstractsFromPrimaryAndSecondary.AbstractReturnsFieldInSecondaryBase, Is.EqualTo(202));
+        }
+    }
+
+    [Test]
+    public void TestOverriddenSetterOnly()
+    {
+        using (var hasGetterAndOverriddenSetter = new HasGetterAndOverriddenSetter())
+        {
+            const int value = 5;
+            hasGetterAndOverriddenSetter.SetBaseSetter(value);
+            Assert.That(hasGetterAndOverriddenSetter.BaseSetter, Is.EqualTo(value));
         }
     }
 
@@ -677,5 +697,29 @@ public unsafe class CSharpTests : GeneratorTestFixture
         {
             return base.HasPointerToEnumInParam(pointerToEnum);
         }
+    }
+
+    [Test]
+    public void TestGenerationOfIncompleteClasses()
+    {
+        var incompleteStruct = CSharp.CSharp.CreateIncompleteStruct();
+        Assert.IsNotNull(incompleteStruct);
+        Assert.DoesNotThrow(() => CSharp.CSharp.UseIncompleteStruct(incompleteStruct));
+    }
+
+    [Test]
+    public void TestForwardDeclaredStruct()
+    {
+        var forwardDeclaredStruct = CSharp.CSharp.CreateForwardDeclaredStruct(10);
+        var i = CSharp.CSharp.UseForwardDeclaredStruct(forwardDeclaredStruct);
+        Assert.AreEqual(forwardDeclaredStruct.I, i);
+    }
+
+    [Test]
+    public void TestDuplicateDeclaredIncompleteStruct()
+    {
+        var duplicateDeclaredIncompleteStruct = CSharp.CSharp.CreateDuplicateDeclaredStruct(10);
+        var i = CSharp.CSharp.UseDuplicateDeclaredStruct(duplicateDeclaredIncompleteStruct);
+        Assert.AreEqual(10, i);
     }
 }

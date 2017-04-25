@@ -1,13 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CppSharp.AST;
 using CppSharp.Generators;
-using CppSharp.Passes;
-using CppSharp.Types;
-using CppAbi = CppSharp.Parser.AST.CppAbi;
 using CppSharp.Parser;
+using CppSharp.Passes;
+using CppAbi = CppSharp.Parser.AST.CppAbi;
 
 namespace CppSharp
 {
@@ -39,7 +38,7 @@ namespace CppSharp
                 var path = Path.Combine(directory.FullName, dir);
 
                 if (Directory.Exists(path) &&
-                    Directory.Exists(Path.Combine(directory.FullName, "patches")))
+                    Directory.Exists(Path.Combine(directory.FullName, "deps")))
                     return path;
 
                 directory = directory.Parent;
@@ -55,16 +54,17 @@ namespace CppSharp
             parserOptions.Abi = Abi;
 
             var options = driver.Options;
-            options.LibraryName = "CppSharp.CppParser";
-            options.SharedLibraryName = "CppSharp.CppParser.dll";
             options.GeneratorKind = Kind;
-            options.Headers.AddRange(new[]
+            options.CommentKind = CommentKind.BCPLSlash;
+            var parserModule = options.AddModule("CppSharp.CppParser");
+            parserModule.Headers.AddRange(new[]
             {
                 "AST.h",
                 "Sources.h",
                 "CppParser.h"
             });
-            options.Libraries.Add("CppSharp.CppParser.lib");
+            parserModule.Libraries.Add("CppSharp.CppParser.lib");
+            parserModule.OutputNamespace = string.Empty;
 
             if (Abi == CppAbi.Microsoft)
                 parserOptions.MicrosoftMode = true;
@@ -87,7 +87,6 @@ namespace CppSharp
             if (Kind == GeneratorKind.CSharp)
                 options.OutputDir = Path.Combine(options.OutputDir, parserOptions.TargetTriple + extraTriple);
 
-            options.OutputNamespace = string.Empty;
             options.CheckSymbols = false;
             //options.Verbose = true;
             options.UnityBuild = true;
@@ -158,21 +157,35 @@ namespace CppSharp
 
         public void SetupPasses(Driver driver)
         {
-            driver.AddTranslationUnitPass(new CheckMacroPass());
             driver.AddTranslationUnitPass(new IgnoreStdFieldsPass());
         }
 
         public void Preprocess(Driver driver, ASTContext ctx)
         {
             ctx.RenameNamespace("CppSharp::CppParser", "Parser");
+
+            if (driver.Options.IsCSharpGenerator)
+            {
+                driver.Generator.OnUnitGenerated += o =>
+                {
+                    Block firstBlock = o.Outputs[0].RootBlock.Blocks[1];
+                    if (o.TranslationUnit.Module == driver.Options.SystemModule)
+                    {
+                        firstBlock.NewLine();
+                        firstBlock.WriteLine("[assembly:InternalsVisibleTo(\"CppSharp.Parser.CSharp\")]");
+                    }
+                    else
+                    {
+                        firstBlock.WriteLine("using System.Runtime.CompilerServices;");
+                        firstBlock.NewLine();
+                        firstBlock.WriteLine("[assembly:InternalsVisibleTo(\"CppSharp.Parser\")]");
+                    }
+                };
+            }
         }
 
         public void Postprocess(Driver driver, ASTContext ctx)
         {
-            new CaseRenamePass(
-                RenameTargets.Function | RenameTargets.Method | RenameTargets.Property | RenameTargets.Delegate |
-                RenameTargets.Field | RenameTargets.Variable,
-                RenameCasePattern.UpperCamelCase).VisitASTContext(driver.Context.ASTContext);
         }
 
         public static void Main(string[] args)

@@ -28,7 +28,7 @@ namespace CppSharp.AST
 
         public string ToNativeString()
         {
-            var cppTypePrinter = new CppTypePrinter { PrintScopeKind = CppTypePrintScopeKind.Qualified };
+            var cppTypePrinter = new CppTypePrinter { PrintScopeKind = TypePrintScopeKind.Qualified };
             return Visit(cppTypePrinter);
         }
 
@@ -222,6 +222,19 @@ namespace CppSharp.AST
         }
     }
 
+    public enum ExceptionSpecType
+    {
+        None,
+        DynamicNone,
+        Dynamic,
+        MSAny,
+        BasicNoexcept,
+        ComputedNoexcept,
+        Unevaluated,
+        Uninstantiated,
+        Unparsed
+    }
+
     /// <summary>
     /// Represents an C/C++ function type.
     /// </summary>
@@ -234,6 +247,8 @@ namespace CppSharp.AST
         public List<Parameter> Parameters;
 
         public CallingConvention CallingConvention { get; set; }
+
+        public ExceptionSpecType ExceptionSpecType { get; set; }
 
         public FunctionType()
         {
@@ -700,7 +715,7 @@ namespace CppSharp.AST
 
             return Arguments.SequenceEqual(type.Arguments) &&
                 ((Template != null && Template.Name == type.Template.Name) ||
-                Desugared == type.Desugared);
+                (Desugared.Type != null && Desugared == type.Desugared));
         }
 
         public override int GetHashCode()
@@ -825,6 +840,8 @@ namespace CppSharp.AST
     {
         public QualifiedType Replacement;
 
+        public TemplateParameterType ReplacedParameter { get; set; }
+
         public TemplateParameterSubstitutionType()
         {
         }
@@ -924,7 +941,9 @@ namespace CppSharp.AST
         {
         }
 
-        public QualifiedType Desugared { get; set; }
+        public QualifiedType Qualifier { get; set; }
+
+        public string Identifier { get; set; }
 
         public override T Visit<T>(ITypeVisitor<T> visitor,
                                    TypeQualifiers quals = new TypeQualifiers())
@@ -1095,6 +1114,7 @@ namespace CppSharp.AST
         Bool,
         WideChar,
         Char,
+        SChar,
         UChar,
         Char16,
         Char32,
@@ -1115,6 +1135,7 @@ namespace CppSharp.AST
         Float128,
         IntPtr,
         UIntPtr,
+        String
     }
 
     /// <summary>

@@ -213,6 +213,7 @@ namespace CppSharp.Generators.CLI
                 case PrimitiveType.Bool:
                 case PrimitiveType.Char:
                 case PrimitiveType.WideChar:
+                case PrimitiveType.SChar:
                 case PrimitiveType.UChar:
                 case PrimitiveType.Short:
                 case PrimitiveType.UShort:
@@ -248,7 +249,7 @@ namespace CppSharp.Generators.CLI
             FunctionType function;
             if (decl.Type.IsPointerTo(out function))
             {
-                Context.Return.Write("safe_cast<{0}>(", typedef);
+                Context.Return.Write($"{Context.ReturnVarName} == nullptr ? nullptr : safe_cast<{typedef}>(");
                 Context.Return.Write("System::Runtime::InteropServices::Marshal::");
                 Context.Return.Write("GetDelegateForFunctionPointer(");
                 Context.Return.Write("IntPtr({0}), {1}::typeid))",Context.ReturnVarName,
@@ -376,7 +377,7 @@ namespace CppSharp.Generators.CLI
         private string ToCLITypeName(Declaration decl)
         {
             var typePrinter = new CLITypePrinter(Context.Context);
-            return typePrinter.VisitDeclaration(decl);
+            return typePrinter.VisitDeclaration(decl).ToString();
         }
 
         public override bool VisitClassTemplateDecl(ClassTemplate template)

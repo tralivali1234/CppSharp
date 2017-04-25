@@ -49,6 +49,7 @@ public:
     void* ptr;
     static const int unsafe;
     static const char charArray[];
+    static int readWrite;
 
     const char* GetANSI();
 
@@ -68,6 +69,7 @@ public:
 
 // HACK: do not move these to the cpp - C++/CLI is buggy and cannot link static fields initialised in the cpp
 const int Foo::unsafe = 10;
+int Foo::readWrite = 15;
 const char Foo::charArray[] = "abc";
 
 struct DLL_API Bar
@@ -322,6 +324,7 @@ DLL_API int operator==(const Foo2& a, const Foo2& b)
 typedef int (*DelegateInGlobalNamespace)(int);
 typedef int (STDCALL *DelegateStdCall)(int);
 typedef int (CDECL *DelegateCDecl)(int n);
+typedef void(*DelegateNullCheck)(void);
 
 struct DLL_API TestDelegates
 {
@@ -342,6 +345,8 @@ struct DLL_API TestDelegates
     int (*MarshalAnonymousDelegate4())(int n);
 
     void MarshalDelegateInAnotherUnit(DelegateInAnotherUnit del);
+
+    DelegateNullCheck MarshalNullDelegate();
 
     DelegateInClass A;
     DelegateInGlobalNamespace B;
@@ -381,15 +386,16 @@ struct DLL_API TestStaticClass
 {
     static int Add(int a, int b);
 
-        static int GetOneTwoThree();
+    static int GetOneTwoThree();
 
-protected:
-
-        static int _Mult(int a, int b);
-
-        static int GetFourFiveSix();
+    TestStaticClass& operator=(const TestStaticClass& oth);
 
 private:
+
+    static int _Mult(int a, int b);
+
+    static int GetFourFiveSix();
+
     TestStaticClass();
 };
 
@@ -414,9 +420,9 @@ int TestStaticClassDerived::Foo() { return 0; }
 class DLL_API TestNotStaticClass
 {
 public:
-        static TestNotStaticClass StaticFunction();
+    static TestNotStaticClass StaticFunction();
 private:
-        TestNotStaticClass();
+    TestNotStaticClass();
 };
 
 TestNotStaticClass::TestNotStaticClass()
@@ -425,7 +431,7 @@ TestNotStaticClass::TestNotStaticClass()
 
 TestNotStaticClass TestNotStaticClass::StaticFunction()
 {
-        return TestNotStaticClass();
+    return TestNotStaticClass();
 }
 
 class HasIgnoredField
@@ -792,9 +798,6 @@ template<typename T> class FriendTemplate
 {
     template<typename TT>
     friend FriendTemplate<TT> func(const FriendTemplate<TT>&);
-
-    friend FriendTemplate;
-    friend class FriendTemplate;
 
     template<typename TT>
     friend class FriendTemplate;
@@ -1213,7 +1216,14 @@ public:
     void overload(int& i);
     void overload(int&& i);
     void overload(const int& i);
+    void dispose();
 };
 
 DLL_API void hasPointerParam(Foo* foo, int i);
 DLL_API void hasPointerParam(const Foo& foo);
+
+enum EmptyEnum { };
+
+enum __enum_with_underscores { lOWER_BEFORE_CAPITAL, CAPITALS_More, underscore_at_end_, usesDigits1_0 };
+
+void DLL_API sMallFollowedByCapital();

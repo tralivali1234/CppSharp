@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using CppSharp.AST;
@@ -11,11 +10,9 @@ namespace CppSharp.Passes
     {
         private readonly Dictionary<string, int> methodSignatures;
         private int Count;
-        private readonly IDiagnostics diagnostics;
 
-        public DeclarationName(IDiagnostics diagnostics)
+        public DeclarationName()
         {
-            this.diagnostics = diagnostics;
             methodSignatures = new Dictionary<string, int>();
         }
 
@@ -44,9 +41,6 @@ namespace CppSharp.Passes
 
         private bool UpdateName(Function function)
         {
-            if (function.TranslationUnit.Module != null)
-                Generator.CurrentOutputNamespace = function.TranslationUnit.Module.OutputNamespace;
-
             var @params = function.Parameters.Where(p => p.Kind != ParameterKind.IndirectReturnType)
                                 .Select(p => p.QualifiedType.ToString());
             // Include the conversion type in case of conversion operators
@@ -77,12 +71,12 @@ namespace CppSharp.Passes
             {
                 // TODO: turn into a method; append the original type (say, "signed long")
                 // of the last parameter to the type so that the user knows which overload is called
-                diagnostics.Warning("Duplicate operator {0} ignored", function.Name);
+                Diagnostics.Warning("Duplicate operator {0} ignored", function.Name);
                 function.ExplicitlyIgnore();
             }
             else if (method != null && method.IsConstructor)
             {
-                diagnostics.Warning("Duplicate constructor {0} ignored", function.Name);
+                Diagnostics.Warning("Duplicate constructor {0} ignored", function.Name);
                 function.ExplicitlyIgnore();
             }
             else
@@ -221,7 +215,7 @@ namespace CppSharp.Passes
 
             // If the name is not yet on the map, then add it.
             if (!names.ContainsKey(fullName))
-                names.Add(fullName, new DeclarationName(Diagnostics));
+                names.Add(fullName, new DeclarationName());
 
             if (names[fullName].UpdateName(decl))
             {

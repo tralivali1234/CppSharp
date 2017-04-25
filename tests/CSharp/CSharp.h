@@ -373,6 +373,12 @@ namespace lowerCaseNameSpace
     };
 }
 
+class DLL_API DefaultZeroMappedToEnum
+{
+public:
+    DefaultZeroMappedToEnum(int* = 0);
+};
+
 class DLL_API MethodsWithDefaultValues : public Quux
 {
 public:
@@ -384,9 +390,11 @@ public:
 
     static const char* stringConstant;
     static int intConstant;
+    typedef int* Zero;
 
     MethodsWithDefaultValues(Foo foo = Foo());
     MethodsWithDefaultValues(int a);
+    MethodsWithDefaultValues(float a, Zero b = 0);
     MethodsWithDefaultValues(double d, QList<QColor> list = QList<QColor>());
     MethodsWithDefaultValues(QRect* pointer, float f = 1, int i = std::numeric_limits<double>::infinity());
     void defaultPointer(Foo* ptr = 0);
@@ -407,6 +415,7 @@ public:
     QFlags<Flags> defaultMappedToEnum(const QFlags<Flags>& qFlags = Flags::Flag3);
     void defaultMappedToZeroEnum(QFlags<Flags> qFlags = 0);
     void defaultMappedToEnumAssignedWithCtor(QFlags<Flags> qFlags = QFlags<Flags>());
+    void defaultZeroMappedToEnumAssignedWithCtor(DefaultZeroMappedToEnum defaultZeroMappedToEnum = DefaultZeroMappedToEnum());
     void defaultImplicitCtorInt(Quux arg = 0);
     void defaultImplicitCtorChar(Quux arg = 'a');
     void defaultImplicitCtorFoo(Quux arg = Foo());
@@ -1073,21 +1082,21 @@ class DLL_API MissingObjectOnVirtualCallSecondaryBase
 {
 public:
     MissingObjectOnVirtualCallSecondaryBase();
-    virtual void f();
+    virtual int f();
 };
 
 class DLL_API MissingObjectOnVirtualCall : public HasVirtualDtor1, public MissingObjectOnVirtualCallSecondaryBase
 {
 public:
     MissingObjectOnVirtualCall();
-    void f();
+    int f();
 };
 
 class DLL_API HasMissingObjectOnVirtualCall
 {
 public:
     HasMissingObjectOnVirtualCall();
-    void makeMissingObjectOnVirtualCall();
+    int makeMissingObjectOnVirtualCall();
     void setMissingObjectOnVirtualCall(MissingObjectOnVirtualCall* value);
 private:
     MissingObjectOnVirtualCall* stackOverflowOnVirtualCall;
@@ -1121,3 +1130,43 @@ public:
 private:
     int field;
 };
+
+class DLL_API HasBaseSetter
+{
+public:
+    HasBaseSetter();
+    ~HasBaseSetter();
+    virtual void setBaseSetter(int value);
+};
+
+class DLL_API HasGetterAndOverriddenSetter : public HasBaseSetter
+{
+public:
+    HasGetterAndOverriddenSetter();
+    ~HasGetterAndOverriddenSetter();
+    void setBaseSetter(int value);
+    int baseSetter();
+protected:
+    int field;
+};
+
+void DLL_API hasArrayOfConstChar(const char* const arrayOfConstChar[]);
+
+struct CompleteIncompleteStruct;
+
+typedef struct IncompleteStruct IncompleteStruct;
+
+DLL_API IncompleteStruct* createIncompleteStruct();
+DLL_API void useIncompleteStruct(IncompleteStruct* a);
+
+struct DLL_API DuplicateDeclaredStruct;
+
+DLL_API DuplicateDeclaredStruct* createDuplicateDeclaredStruct(int i);
+DLL_API int useDuplicateDeclaredStruct(DuplicateDeclaredStruct* s);
+
+struct DLL_API ForwardDeclaredStruct {
+    int i = 0;
+};
+
+DLL_API ForwardDeclaredStruct* createForwardDeclaredStruct(int i);
+DLL_API int useForwardDeclaredStruct(ForwardDeclaredStruct* s);

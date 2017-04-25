@@ -3,6 +3,17 @@ using System.Runtime.InteropServices;
 
 namespace CppSharp
 {
+    public enum TargetPlatform
+    {
+        Windows,
+        Linux,
+        Android,
+        MacOS,
+        iOS,
+        WatchOS,
+        TVOS
+    }
+
     public static class Platform
     {
         public static bool IsWindows

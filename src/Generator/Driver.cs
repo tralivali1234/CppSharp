@@ -1,26 +1,23 @@
-﻿using System;
+using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Reflection;
-using Microsoft.CSharp;
 using CppSharp.AST;
 using CppSharp.Generators;
 using CppSharp.Generators.CLI;
 using CppSharp.Generators.CSharp;
-using CppSharp.Passes;
-using CppSharp.Types;
 using CppSharp.Parser;
+using CppSharp.Passes;
 using CppSharp.Utils;
+using Microsoft.CSharp;
 
 namespace CppSharp
 {
     public class Driver
     {
-        public IDiagnostics Diagnostics { get; private set; }
         public DriverOptions Options { get; private set; }
         public ParserOptions ParserOptions { get; set; }
         public Project Project { get; private set; }
@@ -29,10 +26,9 @@ namespace CppSharp
 
         public bool HasCompilationErrors { get; set; }
 
-        public Driver(DriverOptions options, IDiagnostics diagnostics)
+        public Driver(DriverOptions options)
         {
             Options = options;
-            Diagnostics = diagnostics;
             Project = new Project();
             ParserOptions = new ParserOptions();
         }
@@ -70,7 +66,8 @@ namespace CppSharp
         {
             ValidateOptions();
             ParserOptions.SetupIncludes();
-            Context = new BindingContext(Diagnostics, Options, ParserOptions);
+            Context = new BindingContext(Options, ParserOptions);
+            Context.TypeMaps.SetupTypeMaps(Options.GeneratorKind);
             Generator = CreateGeneratorFromKind(Options.GeneratorKind);
         }
 
@@ -104,8 +101,8 @@ namespace CppSharp
             {
                 var diag = result.GetDiagnostics(i);
 
-                if (Options.IgnoreParseWarnings
-                    && diag.Level == ParserDiagnosticLevel.Warning)
+                if (diag.Level == ParserDiagnosticLevel.Warning &&
+                    !Options.Verbose)
                     continue;
 
                 if (diag.Level == ParserDiagnosticLevel.Note)
@@ -201,6 +198,9 @@ namespace CppSharp
 
             parser.SourcesParsed += OnSourceFileParsed;
             parser.ParseProject(Project, Options.UnityBuild);
+
+            foreach (var source in Project.Sources.Where(s => s.Options != null))
+                source.Options.Dispose();
            
             Context.TargetInfo = parser.GetTargetInfo(ParserOptions);
             Context.ASTContext = ClangParser.ConvertASTContext(parser.ASTContext);
@@ -222,19 +222,23 @@ namespace CppSharp
 
         public void SortModulesByDependencies()
         {
-            if (Options.Modules.All(m => m.Libraries.Any() || m == Options.SystemModule))
+            if (!Options.DoAllModulesHaveLibraries())
+                return;
+
+            var sortedModules = Options.Modules.TopologicalSort(m =>
             {
-                var sortedModules = Options.Modules.TopologicalSort(m =>
-                {
-                    return from library in Context.Symbols.Libraries
-                           where m.Libraries.Contains(library.FileName)
-                           from module in Options.Modules
-                           where library.Dependencies.Intersect(module.Libraries).Any()
-                           select module;
-                });
-                Options.Modules.Clear();
-                Options.Modules.AddRange(sortedModules);
-            }
+                var dependencies = (from library in Context.Symbols.Libraries
+                                    where m.Libraries.Contains(library.FileName)
+                                    from module in Options.Modules
+                                    where library.Dependencies.Intersect(module.Libraries).Any()
+                                    select module).ToList();
+                if (m != Options.SystemModule)
+                    m.Dependencies.Add(Options.SystemModule);
+                m.Dependencies.AddRange(dependencies);
+                return dependencies;
+            });
+            Options.Modules.Clear();
+            Options.Modules.AddRange(sortedModules);
         }
 
         public bool ParseLibraries()
@@ -284,14 +288,14 @@ namespace CppSharp
             if (Options.IsCSharpGenerator)
             {
                 if (!ParserOptions.IsMicrosoftAbi)
-                    TranslationUnitPasses.AddPass(new GenerateInlinesCodePass());
+                    TranslationUnitPasses.AddPass(new GenerateSymbolsPass());
                 TranslationUnitPasses.AddPass(new TrimSpecializationsPass());
-                TranslationUnitPasses.AddPass(new GenerateTemplatesCodePass());
             }
 
             library.SetupPasses(this);
 
             TranslationUnitPasses.AddPass(new FindSymbolsPass());
+            TranslationUnitPasses.AddPass(new CheckMacroPass());
             TranslationUnitPasses.AddPass(new CheckStaticClass());
             TranslationUnitPasses.AddPass(new MoveOperatorToClassPass());
             TranslationUnitPasses.AddPass(new MoveFunctionToClassPass());
@@ -325,13 +329,15 @@ namespace CppSharp
                 TranslationUnitPasses.AddPass(new ParamTypeToInterfacePass());
             }
 
-            TranslationUnitPasses.AddPass(new CheckVTableComponentsPass());
-
             if (Options.IsCSharpGenerator)
                 TranslationUnitPasses.AddPass(new DelegatesPass());
 
             TranslationUnitPasses.AddPass(new GetterSetterToPropertyPass());
             TranslationUnitPasses.AddPass(new StripUnusedSystemTypesPass());
+
+            if (Options.GeneratorKind == GeneratorKind.CLI ||
+                Options.GeneratorKind == GeneratorKind.CSharp)
+                TranslationUnitPasses.RenameDeclsUpperCase(RenameTargets.Any &~ RenameTargets.Parameter);
         }
 
         public void ProcessCode()
@@ -366,7 +372,7 @@ namespace CppSharp
                 if (Options.GenerateName != null)
                     fileBase = Options.GenerateName(output.TranslationUnit);
 
-                foreach (var template in output.Templates)
+                foreach (var template in output.Outputs)
                 {
                     var fileRelativePath = string.Format("{0}.{1}", fileBase, template.FileExtension);
 
@@ -379,17 +385,16 @@ namespace CppSharp
             }
         }
 
-        private static readonly Dictionary<string, string> libraryMappings = new Dictionary<string, string>();
+        private static readonly Dictionary<Module, string> libraryMappings = new Dictionary<Module, string>();
 
-        public void CompileCode(AST.Module module)
+        public void CompileCode(Module module)
         {
-            var assemblyFile = string.IsNullOrEmpty(module.LibraryName) ?
-                "out.dll" : module.LibraryName + ".dll";
+            var assemblyFile = Path.Combine(Options.OutputDir, module.LibraryName + ".dll");
 
-            var docFile = Path.ChangeExtension(Path.GetFileName(assemblyFile), ".xml");
+            var docFile = Path.ChangeExtension(assemblyFile, ".xml");
 
             var compilerOptions = new StringBuilder();
-            compilerOptions.Append(" /doc:" + docFile);
+            compilerOptions.Append($" /doc:\"{docFile}\"");
             compilerOptions.Append(" /debug:pdbonly");
             compilerOptions.Append(" /unsafe");
 
@@ -404,22 +409,21 @@ namespace CppSharp
 
             if (module != Options.SystemModule)
                 compilerParameters.ReferencedAssemblies.Add(
-                    string.Format("{0}.dll", Options.SystemModule.LibraryName));
+                    Path.Combine(Options.OutputDir, $"{Options.SystemModule.LibraryName}.dll"));
             // add a reference to System.Core
             compilerParameters.ReferencedAssemblies.Add(typeof(Enumerable).Assembly.Location);
 
-            var location = Assembly.GetExecutingAssembly().Location;
+            var location = System.Reflection.Assembly.GetExecutingAssembly().Location;
             var outputDir = Path.GetDirectoryName(location);
             var locationRuntime = Path.Combine(outputDir, "CppSharp.Runtime.dll");
             compilerParameters.ReferencedAssemblies.Add(locationRuntime);
 
-            compilerParameters.ReferencedAssemblies.AddRange(Context.Symbols.Libraries.SelectMany(
-                lib => lib.Dependencies.Where(
-                    d => libraryMappings.ContainsKey(d) &&
-                         !compilerParameters.ReferencedAssemblies.Contains(libraryMappings[d]))
-                    .Select(l => libraryMappings[l])).ToArray());
+            compilerParameters.ReferencedAssemblies.AddRange(
+                (from dependency in module.Dependencies
+                 where libraryMappings.ContainsKey(dependency)
+                 select libraryMappings[dependency]).ToArray());
 
-            Diagnostics.Message("Compiling {0}...", module.LibraryName);
+            Diagnostics.Message($"Compiling {module.LibraryName}...");
             CompilerResults compilerResults;
             using (var codeProvider = new CSharpCodeProvider(
                 new Dictionary<string, string> {
@@ -438,10 +442,8 @@ namespace CppSharp
             HasCompilationErrors = errors.Count > 0;
             if (!HasCompilationErrors)
             {
+                libraryMappings[module] = Path.Combine(outputDir, assemblyFile);
                 Diagnostics.Message("Compilation succeeded.");
-                var wrapper = Path.Combine(outputDir, assemblyFile);
-                foreach (var library in module.Libraries)
-                    libraryMappings[library] = wrapper;
             }
         }
 
@@ -463,31 +465,29 @@ namespace CppSharp
         public static void Run(ILibrary library)
         {
             var options = new DriverOptions();
-
-            var Log = new TextDiagnosticPrinter();
-            var driver = new Driver(options, Log);
+            var driver = new Driver(options);
 
             library.Setup(driver);
 
             driver.Setup();
 
             if(driver.ParserOptions.Verbose)
-                Log.Level = DiagnosticKind.Debug;
+                Diagnostics.Level = DiagnosticKind.Debug;
 
             if (!options.Quiet)
-                Log.Message("Parsing libraries...");
+                Diagnostics.Message("Parsing libraries...");
 
             if (!driver.ParseLibraries())
                 return;
 
             if (!options.Quiet)
-                Log.Message("Parsing code...");
+                Diagnostics.Message("Parsing code...");
 
             driver.BuildParseOptions();
 
             if (!driver.ParseCode())
             {
-                Log.Error("CppSharp has encountered an error while parsing code.");
+                Diagnostics.Error("CppSharp has encountered an error while parsing code.");
                 return;
             }
 
@@ -495,7 +495,7 @@ namespace CppSharp
             options.Modules.RemoveAll(m => m != options.SystemModule && !m.Units.GetGenerated().Any());
 
             if (!options.Quiet)
-                Log.Message("Processing code...");
+                Diagnostics.Message("Processing code...");
 
             library.Preprocess(driver, driver.Context.ASTContext);
 
@@ -505,7 +505,7 @@ namespace CppSharp
             library.Postprocess(driver, driver.Context.ASTContext);
 
             if (!options.Quiet)
-                Log.Message("Generating code...");
+                Diagnostics.Message("Generating code...");
 
             var outputs = driver.GenerateCode();
 
@@ -531,6 +531,7 @@ namespace CppSharp
 
             driver.Generator.Dispose();
             driver.Context.TargetInfo.Dispose();
+            driver.ParserOptions.Dispose();
         }
     }
 }

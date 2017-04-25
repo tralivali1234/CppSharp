@@ -2,11 +2,14 @@
 using CppSharp.AST;
 using CppSharp.AST.Extensions;
 using CppSharp.Types;
+using System.Collections.Generic;
 
 namespace CppSharp.Passes
 {
     public class CheckIgnoredDeclsPass : TranslationUnitPass
     {
+        public bool CheckDecayedTypes { get; set; } = true;
+
         public bool CheckDeclarationAccess(Declaration decl)
         {
             var generateNonPublicDecls = Options.IsCSharpGenerator;
@@ -36,7 +39,13 @@ namespace CppSharp.Passes
 
         public override bool VisitClassDecl(Class @class)
         {
-            if (!base.VisitClassDecl(@class) || !@class.IsDependent)
+            if (!base.VisitClassDecl(@class))
+                return false;
+
+            if (@class.IsInjected)
+                injectedClasses.Add(@class);
+
+            if (!@class.IsDependent)
                 return false;
 
             // templates are not supported yet
@@ -135,13 +144,16 @@ namespace CppSharp.Passes
                     return false;
                 }
 
-                var decayedType = param.Type.Desugar() as DecayedType;
-                if (decayedType != null)
+                if (CheckDecayedTypes)
                 {
-                    function.ExplicitlyIgnore();
-                    Diagnostics.Debug("Function '{0}' was ignored due to unsupported decayed type param",
-                        function.Name);
-                    return false;
+                    var decayedType = param.Type.Desugar() as DecayedType;
+                    if (decayedType != null)
+                    {
+                        function.ExplicitlyIgnore();
+                        Diagnostics.Debug("Function '{0}' was ignored due to unsupported decayed type param",
+                            function.Name);
+                        return false;
+                    }
                 }
 
                 if (param.Kind == ParameterKind.IndirectReturnType)
@@ -174,21 +186,19 @@ namespace CppSharp.Passes
         {
             var @class = method.Namespace as Class;
 
-            if (method.IsVirtual)
-            {
-                Class ignoredBase;
-                if (HasIgnoredBaseClass(method, @class, out ignoredBase))
-                {
-                    Diagnostics.Debug(
-                        "Virtual method '{0}' was ignored due to ignored base '{1}'",
-                        method.QualifiedOriginalName, ignoredBase.Name);
+            if (!method.IsVirtual)
+                return true;
 
-                    method.ExplicitlyIgnore();
-                    return false;
-                }
-            }
+            Class ignoredBase;
+            if (!HasIgnoredBaseClass(method, @class, out ignoredBase))
+                return true;
 
-            return true;
+            Diagnostics.Debug(
+                "Virtual method '{0}' was ignored due to ignored base '{1}'",
+                method.QualifiedOriginalName, ignoredBase.Name);
+
+            method.ExplicitlyIgnore();
+            return false;
         }
 
         static bool HasIgnoredBaseClass(INamedDecl @override, Class @class,
@@ -320,6 +330,16 @@ namespace CppSharp.Passes
             return true;
         }
 
+        public override bool VisitASTContext(ASTContext c)
+        {
+            base.VisitASTContext(c);
+
+            foreach (var injectedClass in injectedClasses)
+                injectedClass.Namespace.Declarations.Remove(injectedClass);
+
+            return true;
+        }
+
         #region Helpers
 
         /// <remarks>
@@ -347,7 +367,7 @@ namespace CppSharp.Passes
                 return true;
             }
 
-            if (Options.Modules.All(m => m == Options.SystemModule || m.Libraries.Count > 0) &&
+            if (Options.DoAllModulesHaveLibraries() &&
                 module != Options.SystemModule && IsTypeExternal(module, type))
             {
                 msg = "external";
@@ -364,6 +384,14 @@ namespace CppSharp.Passes
             {
                 msg = "null";
                 return true;
+            }
+
+            var @class = decl as Class;
+            if (@class != null && @class.IsOpaque && !@class.IsDependent && 
+                !(@class is ClassTemplateSpecialization))
+            {
+                msg = null;
+                return false;
             }
 
             if (decl.IsIncomplete)
@@ -397,24 +425,25 @@ namespace CppSharp.Passes
 
             Declaration decl;
             if (!finalType.TryGetDeclaration(out decl)) return true;
+
+            var @class = (decl as Class);
+            if (@class != null && @class.IsOpaque && !@class.IsDependent && 
+                !(@class is ClassTemplateSpecialization))
+                return true;
             return !decl.IsIncomplete || decl.CompleteDeclaration != null;
         }
 
-        private bool IsTypeExternal(Module module, Type type)
+        public static bool IsTypeExternal(Module module, Type type)
         {
             Declaration declaration;
-            if ((type.GetFinalPointee() ?? type).TryGetDeclaration(out declaration))
-            {
-                declaration = declaration.CompleteDeclaration ?? declaration;
-                if (declaration.TranslationUnit.Module.Libraries.Any(l =>
-                        Context.Symbols.Libraries.First(
-                            lib => lib.FileName == l).Dependencies.Any(
-                                module.Libraries.Contains)))
-                {
-                    return true;
-                }
-            }
-            return false;
+            if (!(type.GetFinalPointee() ?? type).TryGetDeclaration(out declaration))
+                return false;
+
+            declaration = declaration.CompleteDeclaration ?? declaration;
+            if (declaration.Namespace == null || declaration.TranslationUnit.Module == null)
+                return false;
+
+            return declaration.TranslationUnit.Module.Dependencies.Contains(module);
         }
 
         private bool IsTypeIgnored(Type type)
@@ -436,5 +465,7 @@ namespace CppSharp.Passes
         }
 
         #endregion
+
+        private HashSet<Declaration> injectedClasses = new HashSet<Declaration>();
     }
 }

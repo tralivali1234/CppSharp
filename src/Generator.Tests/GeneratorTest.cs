@@ -25,21 +25,15 @@ namespace CppSharp.Utils
         public virtual void Setup(Driver driver)
         {
             var options = driver.Options;
-            options.LibraryName = name;
             options.GeneratorKind = kind;
             options.OutputDir = Path.Combine(GetOutputDirectory(), "gen", name);
-            options.SharedLibraryName = name + ".Native";
             options.Quiet = true;
-            options.IgnoreParseWarnings = true;
+            var testModule = options.AddModule(name);
+            testModule.SharedLibraryName = name + ".Native";
 
-            driver.Diagnostics.Message("");
-            driver.Diagnostics.Message("Generating bindings for {0} ({1})",
-                options.LibraryName, options.GeneratorKind.ToString());
-
-            // Workaround for CLR which does not check for .dll if the
-            // name already has a dot.
-            if (!Platform.IsMono)
-                options.SharedLibraryName += ".dll";
+            Diagnostics.Message("");
+            Diagnostics.Message("Generating bindings for {0} ({1})",
+                testModule.LibraryName, options.GeneratorKind.ToString());
 
             var parserOptions = driver.ParserOptions;
             if (Platform.IsMacOS)
@@ -48,10 +42,10 @@ namespace CppSharp.Utils
             var path = Path.GetFullPath(GetTestsDirectory(name));
             parserOptions.AddIncludeDirs(path);
 
-            driver.Diagnostics.Message("Looking for tests in: {0}", path);
+            Diagnostics.Message("Looking for tests in: {0}", path);
             var files = Directory.EnumerateFiles(path, "*.h");
             foreach (var file in files)
-                options.Headers.Add(Path.GetFileName(file));
+                testModule.Headers.Add(Path.GetFileName(file));
         }
 
         public virtual void Preprocess(Driver driver, ASTContext ctx)
@@ -69,11 +63,17 @@ namespace CppSharp.Utils
         #region Helpers
         public static string GetTestsDirectory(string name)
         {
-            var directory = Directory.GetParent(Directory.GetCurrentDirectory());
+            var directory = new DirectoryInfo(
+                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location));
 
             while (directory != null)
             {
                 var path = Path.Combine(directory.FullName, "tests", name);
+
+                if (Directory.Exists(path))
+                    return path;
+
+                path = Path.Combine(directory.FullName, "external", "CppSharp", "tests", name);
 
                 if (Directory.Exists(path))
                     return path;
@@ -87,7 +87,8 @@ namespace CppSharp.Utils
 
         static string GetOutputDirectory()
         {
-            var directory = Directory.GetParent(Directory.GetCurrentDirectory());
+            string exePath = new Uri(Assembly.GetExecutingAssembly().CodeBase).LocalPath;
+            var directory = Directory.GetParent(exePath);
 
             while (directory != null)
             {

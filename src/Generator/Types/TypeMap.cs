@@ -140,8 +140,16 @@ namespace CppSharp.Types
 
             foreach (var assembly in loadedAssemblies)
             {
-                var types = assembly.FindDerivedTypes(typeof(TypeMap));
-                SetupTypeMaps(types, generatorKind);
+                try
+                {
+                    var types = assembly.FindDerivedTypes(typeof(TypeMap));
+                    SetupTypeMaps(types, generatorKind);
+                }
+                catch (System.Reflection.ReflectionTypeLoadException ex)
+                {
+                    Diagnostics.Error("Error loading type maps from assembly '{0}': {1}",
+                        assembly.GetName().Name, ex.Message);
+                }
             }
         }
 
@@ -154,7 +162,7 @@ namespace CppSharp.Types
                 {
                     if (attr.GeneratorKind == 0 || attr.GeneratorKind == generatorKind)
                     {
-                        TypeMaps[attr.Type] = typeMap;                        
+                        TypeMaps[attr.Type] = typeMap;
                     }
                 }
             }
@@ -173,14 +181,22 @@ namespace CppSharp.Types
                 return true;
             }
 
-            typePrinter.PrintScopeKind = CppTypePrintScopeKind.Qualified;
+            typePrinter.PrintScopeKind = TypePrintScopeKind.Qualified;
             if (FindTypeMap(decl.Visit(typePrinter), out typeMap))
             {
                 typeMap.Type = type;
                 return true;
             }
 
-            typePrinter.PrintScopeKind = CppTypePrintScopeKind.Local;
+            typePrinter.ResolveTypedefs = true;
+            if (FindTypeMap(decl.Visit(typePrinter), out typeMap))
+            {
+                typeMap.Type = type;
+                return true;
+            }
+            typePrinter.ResolveTypedefs = false;
+
+            typePrinter.PrintScopeKind = TypePrintScopeKind.Local;
             if (FindTypeMap(decl.Visit(typePrinter), out typeMap))
             {
                 typeMap.Type = type;
@@ -231,7 +247,7 @@ namespace CppSharp.Types
                 return true;
             }
 
-            typePrinter.PrintScopeKind = CppTypePrintScopeKind.Qualified;
+            typePrinter.PrintScopeKind = TypePrintScopeKind.Qualified;
             if (FindTypeMap(type.Visit(typePrinter), out typeMap))
             {
                 typeMap.Type = type;

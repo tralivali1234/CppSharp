@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using CppSharp.AST;
@@ -26,11 +26,11 @@ namespace CppSharp
         private void OnUnitGenerated(GeneratorOutput output)
         {
             needsStreamInclude = false;
-            foreach (var template in output.Templates)
+            foreach (var template in output.Outputs)
             {
-                foreach (var block in template.FindBlocks(CLIBlockKind.MethodBody))
+                foreach (var block in template.FindBlocks(BlockKind.MethodBody))
                 {
-                    var method = block.Declaration as Method;
+                    var method = block.Object as Method;
                     VisitMethod(method, block);
                 }
                 if (needsStreamInclude)
@@ -38,7 +38,7 @@ namespace CppSharp
                     var sourcesTemplate = template as CLISources;
                     if (sourcesTemplate != null)
                     {
-                        foreach (var block in sourcesTemplate.FindBlocks(CLIBlockKind.Includes))
+                        foreach (var block in sourcesTemplate.FindBlocks(BlockKind.Includes))
                         {
                             block.WriteLine("#include <sstream>");
                             block.WriteLine("");

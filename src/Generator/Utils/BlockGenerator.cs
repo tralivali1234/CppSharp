@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
-using CppSharp.AST;
 
-namespace CppSharp.Generators
+namespace CppSharp
 {
     public enum NewLineKind
     {
@@ -14,26 +14,55 @@ namespace CppSharp.Generators
         IfNotEmpty
     }
 
-    public class BlockKind
+    public enum BlockKind
     {
-        public const int Unknown = 0;
-        public const int BlockComment = 1;
-        public const int InlineComment = 2;
-        public const int Header = 3;
-        public const int Footer = 4;
-        public const int LAST = 5;
+        Unknown,
+        BlockComment,
+        InlineComment,
+        Header,
+        Footer,
+        Usings,
+        Namespace,
+        Enum,
+        EnumItem,
+        Typedef,
+        Class,
+        InternalsClass,
+        InternalsClassMethod,
+        InternalsClassField,
+        Functions,
+        Function,
+        Method,
+        Event,
+        Variable,
+        Property,
+        Field,
+        VTableDelegate,
+        Region,
+        Interface,
+        Finalizer,
+        Includes,
+        IncludesForwardReferences,
+        ForwardReferences,
+        MethodBody,
+        FunctionsClass,
+        Template,
+        Destructor,
+        AccessSpecifier,
+        Fields,
     }
 
+    [DebuggerDisplay("{BlockKind} | {Object}")]
     public class Block : ITextGenerator
     {
         public TextGenerator Text { get; set; }
-        public int Kind { get; set; }
+        public BlockKind Kind { get; set; }
         public NewLineKind NewLineKind { get; set; }
+
+        public object Object { get; set; }
 
         public Block Parent { get; set; }
         public List<Block> Blocks { get; set; }
-
-        public Declaration Declaration { get; set; }
 
         private bool hasIndentChanged;
         private bool isSubBlock;
@@ -45,7 +74,7 @@ namespace CppSharp.Generators
 
         }
 
-        public Block(int kind)
+        public Block(BlockKind kind)
         {
             Kind = kind;
             Blocks = new List<Block>();
@@ -69,11 +98,11 @@ namespace CppSharp.Generators
             Blocks.Add(block);
         }
 
-        public IEnumerable<Block> FindBlocks(int kind)
+        public IEnumerable<Block> FindBlocks(BlockKind kind)
         {
             foreach (var block in Blocks)
             {
-                if (block.Kind ==  kind)
+                if (block.Kind == kind)
                     yield return block;
 
                 foreach (var childBlock in block.FindBlocks(kind))
@@ -81,7 +110,7 @@ namespace CppSharp.Generators
             }
         }
 
-        public virtual string Generate(DriverOptions options)
+        public virtual string Generate()
         {
             if (CheckGenerate != null && !CheckGenerate())
                 return "";
@@ -96,7 +125,7 @@ namespace CppSharp.Generators
             var blockIndex = 0;
             foreach (var childBlock in Blocks)
             {
-                var childText = childBlock.Generate(options);
+                var childText = childBlock.Generate();
 
                 var nextBlock = (++blockIndex < Blocks.Count)
                     ? Blocks[blockIndex]
@@ -105,7 +134,7 @@ namespace CppSharp.Generators
                 var skipBlock = false;
                 if (nextBlock != null)
                 {
-                    var nextText = nextBlock.Generate(options);
+                    var nextText = nextBlock.Generate();
                     if (string.IsNullOrEmpty(nextText) &&
                         childBlock.NewLineKind == NewLineKind.IfNotEmpty)
                         skipBlock = true;
@@ -154,7 +183,7 @@ namespace CppSharp.Generators
             return builder.ToString();
         }
 
-        public StringBuilder GenerateUnformatted(DriverOptions options)
+        public StringBuilder GenerateUnformatted()
         {
             if (CheckGenerate != null && !CheckGenerate())
                 return new StringBuilder(0);
@@ -168,7 +197,7 @@ namespace CppSharp.Generators
             var blockIndex = 0;
             foreach (var childBlock in Blocks)
             {
-                var childText = childBlock.GenerateUnformatted(options);
+                var childText = childBlock.GenerateUnformatted();
 
                 var nextBlock = (++blockIndex < Blocks.Count)
                     ? Blocks[blockIndex]
@@ -176,7 +205,7 @@ namespace CppSharp.Generators
 
                 if (nextBlock != null)
                 {
-                    var nextText = nextBlock.GenerateUnformatted(options);
+                    var nextText = nextBlock.GenerateUnformatted();
                     if (nextText.Length == 0 &&
                         childBlock.NewLineKind == NewLineKind.IfNotEmpty)
                         continue;
@@ -278,37 +307,25 @@ namespace CppSharp.Generators
         #endregion
     }
 
-    public abstract class Template : ITextGenerator
+    public abstract class BlockGenerator : ITextGenerator
     {
-        public BindingContext Context { get; private set; }
-
-        public IDiagnostics Log { get { return Context.Diagnostics; } }
-        public DriverOptions Options { get { return Context.Options; } }
-
-        public List<TranslationUnit> TranslationUnits { get; private set; }
-
-        public TranslationUnit TranslationUnit { get { return TranslationUnits[0]; } }
-
         public Block RootBlock { get; private set; }
         public Block ActiveBlock { get; private set; }
 
-        public abstract string FileExtension { get; }
-
-        protected Template(BindingContext context, IEnumerable<TranslationUnit> units)
+        protected BlockGenerator()
         {
-            Context = context;
-            TranslationUnits = new List<TranslationUnit>(units);
             RootBlock = new Block();
             ActiveBlock = RootBlock;
         }
 
-        public abstract void Process();
-
-        public string Generate()
+        public virtual string Generate()
         {
-            if (Options.IsCSharpGenerator && Options.CompileCode)
-                return RootBlock.GenerateUnformatted(Options).ToString();
-            return RootBlock.Generate(Options);
+            return RootBlock.Generate();
+        }
+
+        public string GenerateUnformatted()
+        {
+            return RootBlock.GenerateUnformatted().ToString();
         }
 
         #region Block helpers
@@ -318,9 +335,9 @@ namespace CppSharp.Generators
             ActiveBlock.AddBlock(block);
         }
 
-        public void PushBlock(int kind, Declaration decl = null)
+        public void PushBlock(BlockKind kind = BlockKind.Unknown, object obj = null)
         {
-            var block = new Block { Kind = kind, Declaration = decl };
+            var block = new Block { Kind = kind, Object = obj };
             PushBlock(block);
         }
 
@@ -341,12 +358,12 @@ namespace CppSharp.Generators
             return block;
         }
 
-        public IEnumerable<Block> FindBlocks(int kind)
+        public IEnumerable<Block> FindBlocks(BlockKind kind)
         {
             return RootBlock.FindBlocks(kind);
         }
 
-        public Block FindBlock(int kind)
+        public Block FindBlock(BlockKind kind)
         {
             return FindBlocks(kind).SingleOrDefault();
         }

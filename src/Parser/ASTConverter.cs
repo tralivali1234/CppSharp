@@ -493,6 +493,7 @@ namespace CppSharp
             _type.ReturnType = VisitQualified(type.ReturnType);
             _type.CallingConvention = DeclConverter.VisitCallingConvention(
                 type.CallingConvention);
+            _type.ExceptionSpecType = VisitExceptionSpecType(type.ExceptionSpecType);
 
             for (uint i = 0; i < type.ParametersCount; ++i)
             {
@@ -527,6 +528,34 @@ namespace CppSharp
                     return AST.PointerType.TypeModifier.RVReference;
                 default:
                     throw new ArgumentOutOfRangeException("modifier");
+            }
+        }
+
+        private static AST.ExceptionSpecType VisitExceptionSpecType(
+            ExceptionSpecType exceptionSpecType)
+        {
+            switch (exceptionSpecType)
+            {
+                case ExceptionSpecType.None:
+                    return AST.ExceptionSpecType.None;
+                case ExceptionSpecType.DynamicNone:
+                    return AST.ExceptionSpecType.DynamicNone;
+                case ExceptionSpecType.Dynamic:
+                    return AST.ExceptionSpecType.Dynamic;
+                case ExceptionSpecType.MSAny:
+                    return AST.ExceptionSpecType.MSAny;
+                case ExceptionSpecType.BasicNoexcept:
+                    return AST.ExceptionSpecType.BasicNoexcept;
+                case ExceptionSpecType.ComputedNoexcept:
+                    return AST.ExceptionSpecType.ComputedNoexcept;
+                case ExceptionSpecType.Unevaluated:
+                    return AST.ExceptionSpecType.Unevaluated;
+                case ExceptionSpecType.Uninstantiated:
+                    return AST.ExceptionSpecType.Uninstantiated;
+                case ExceptionSpecType.Unparsed:
+                    return AST.ExceptionSpecType.Unparsed;
+                default:
+                    throw new ArgumentOutOfRangeException("exceptionSpecType");
             }
         }
 
@@ -655,6 +684,7 @@ namespace CppSharp
         {
             var _type = new AST.TemplateParameterSubstitutionType();
             _type.Replacement = VisitQualified(type.Replacement);
+            _type.ReplacedParameter = (AST.TemplateParameterType) Visit(type.ReplacedParameter);
             VisitType(type, _type);
             return _type;
         }
@@ -672,7 +702,8 @@ namespace CppSharp
         {
             var _type = new AST.DependentNameType();
             VisitType(type, _type);
-            _type.Desugared = VisitQualified(type.Desugared);
+            _type.Qualifier = VisitQualified(type.Qualifier);
+            _type.Identifier = type.Identifier;
             return _type;
         }
 
@@ -700,6 +731,8 @@ namespace CppSharp
                     return AST.PrimitiveType.Char;
                 case PrimitiveType.UChar:
                     return AST.PrimitiveType.UChar;
+                case PrimitiveType.SChar:
+                    return AST.PrimitiveType.SChar;
                 case PrimitiveType.Char16:
                     return AST.PrimitiveType.Char16;
                 case PrimitiveType.Char32:
@@ -855,26 +888,26 @@ namespace CppSharp
             return _rawComment;
         }
 
-        private AST.RawCommentKind ConvertRawCommentKind(RawCommentKind kind)
+        private AST.CommentKind ConvertRawCommentKind(RawCommentKind kind)
         {
             switch (kind)
             {
                 case RawCommentKind.Invalid:
-                    return AST.RawCommentKind.Invalid;
+                    return AST.CommentKind.Invalid;
                 case RawCommentKind.OrdinaryBCPL:
-                    return AST.RawCommentKind.OrdinaryBCPL;
+                    return AST.CommentKind.BCPL;
                 case RawCommentKind.OrdinaryC:
-                    return AST.RawCommentKind.OrdinaryC;
+                    return AST.CommentKind.C;
                 case RawCommentKind.BCPLSlash:
-                    return AST.RawCommentKind.BCPLSlash;
+                    return AST.CommentKind.BCPLSlash;
                 case RawCommentKind.BCPLExcl:
-                    return AST.RawCommentKind.BCPLExcl;
+                    return AST.CommentKind.BCPLExcl;
                 case RawCommentKind.JavaDoc:
-                    return AST.RawCommentKind.JavaDoc;
+                    return AST.CommentKind.JavaDoc;
                 case RawCommentKind.Qt:
-                    return AST.RawCommentKind.Qt;
+                    return AST.CommentKind.Qt;
                 case RawCommentKind.Merged:
-                    return AST.RawCommentKind.Merged;
+                    return AST.CommentKind.Merged;
                 default:
                     throw new ArgumentOutOfRangeException("kind");
             }
@@ -923,6 +956,13 @@ namespace CppSharp
             _decl.OriginalPtr = originalPtr;
 
             NativeObjects.Add(decl);
+
+            for (uint i = 0; i < decl.RedeclarationsCount; i++)
+            {
+                var redecl = decl.GetRedeclarations(i);
+                _decl.Redeclarations.Add(Visit(redecl));
+            }
+
         }
 
         public void VisitDeclContext(DeclarationContext ctx, AST.DeclarationContext _ctx)
@@ -962,7 +1002,7 @@ namespace CppSharp
             {
                 var decl = ctx.GetClasses(i);
                 var _decl = Visit(decl) as AST.Class;
-                if (!_decl.IsIncomplete)
+                if (!_decl.IsIncomplete || _decl.IsOpaque)
                     _ctx.Classes.Add(_decl);
             }
 
@@ -1122,16 +1162,23 @@ namespace CppSharp
             _function.ReturnType = typeConverter.VisitQualified(function.ReturnType);
             _function.IsReturnIndirect = function.IsReturnIndirect;
             _function.HasThisReturn = function.HasThisReturn;
+            _function.IsConstExpr = function.IsConstExpr;
             _function.IsVariadic = function.IsVariadic;
             _function.IsInline = function.IsInline;
             _function.IsPure = function.IsPure;
             _function.IsDeleted = function.IsDeleted;
+            _function.FriendKind = VisitFriendKind(function.FriendKind);
             _function.OperatorKind = VisitCXXOperatorKind(function.OperatorKind);
             _function.Mangled = function.Mangled;
             _function.Signature = function.Signature;
+            _function.Body = function.Body;
             _function.CallingConvention = VisitCallingConvention(function.CallingConvention);
             if (function.InstantiatedFrom != null)
                 _function.InstantiatedFrom = (AST.Function) Visit(function.InstantiatedFrom);
+            _function.FunctionType = typeConverter.VisitQualified(function.QualifiedType);
+            if (function.SpecializationInfo != null)
+                _function.SpecializationInfo = VisitFunctionTemplateSpecialization(
+                    function.SpecializationInfo);
 
             for (uint i = 0; i < function.ParametersCount; ++i)
             {
@@ -1216,9 +1263,9 @@ namespace CppSharp
                     return AST.CXXOperatorKind.New;
                 case CXXOperatorKind.Delete:
                     return AST.CXXOperatorKind.Delete;
-                case CXXOperatorKind.Array_New:
+                case CXXOperatorKind.ArrayNew:
                     return AST.CXXOperatorKind.Array_New;
-                case CXXOperatorKind.Array_Delete:
+                case CXXOperatorKind.ArrayDelete:
                     return AST.CXXOperatorKind.Array_Delete;
                 case CXXOperatorKind.Plus:
                     return AST.CXXOperatorKind.Plus;
@@ -1305,7 +1352,7 @@ namespace CppSharp
             }
         }
 
-        static internal AST.CallingConvention VisitCallingConvention(CallingConvention callingConvention)
+        internal static AST.CallingConvention VisitCallingConvention(CallingConvention callingConvention)
         {
             switch (callingConvention)
             {
@@ -1326,6 +1373,21 @@ namespace CppSharp
             }
         }
 
+        private static AST.FriendKind VisitFriendKind(FriendKind friendKind)
+        {
+            switch (friendKind)
+            {
+                case FriendKind.None:
+                    return AST.FriendKind.None;
+                case FriendKind.Declared:
+                    return AST.FriendKind.Declared;
+                case FriendKind.Undeclared:
+                    return AST.FriendKind.Undeclared;
+                default:
+                    throw new ArgumentOutOfRangeException("friendKind");
+            }
+        }
+
         public override AST.Declaration VisitEnumeration(Enumeration decl)
         {
             var _enum = new AST.Enumeration();
@@ -1340,6 +1402,7 @@ namespace CppSharp
             {
                 var item = decl.GetItems(i);
                 var _item = Visit(item) as AST.Enumeration.Item;
+                _item.Namespace = _enum;
                 _enum.AddItem(_item);
             }
 
@@ -1357,7 +1420,7 @@ namespace CppSharp
             var _item = new AST.Enumeration.Item
             {
                 Expression = decl.Expression,
-                Value = decl.Value
+                Value = decl.Value,
             };
             VisitDeclaration(decl, _item);
 
@@ -1454,6 +1517,7 @@ namespace CppSharp
             _class.HasNonTrivialCopyConstructor = @class.HasNonTrivialCopyConstructor;
             _class.HasNonTrivialDestructor = @class.HasNonTrivialDestructor;
             _class.IsExternCContext = @class.IsExternCContext;
+            _class.IsInjected = @class.IsInjected;
 
             if (@class.Layout != null)
                 _class.Layout = VisitClassLayout(@class.Layout);
@@ -1738,6 +1802,7 @@ namespace CppSharp
                 return FunctionTemplateSpecializations[spec.__Instance];
 
             var _spec = new AST.FunctionTemplateSpecialization();
+            FunctionTemplateSpecializations.Add(spec.__Instance, _spec);
             _spec.Template = (AST.FunctionTemplate)Visit(spec.Template);
             _spec.SpecializedFunction = (AST.Function)Visit(spec.SpecializedFunction);
             _spec.SpecializationKind = VisitSpecializationKind(spec.SpecializationKind);
@@ -1746,7 +1811,6 @@ namespace CppSharp
                 var _arg = VisitTemplateArgument(spec.GetArguments(i));
                 _spec.Arguments.Add(_arg);
             }
-            FunctionTemplateSpecializations.Add(spec.__Instance, _spec);
             NativeObjects.Add(spec);
             return _spec;
         }

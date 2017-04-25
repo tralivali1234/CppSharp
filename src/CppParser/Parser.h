@@ -61,7 +61,8 @@ public:
 private:
     // AST traversers
     void WalkAST();
-    Declaration* WalkDeclaration(const clang::Decl* D, bool CanBeDefinition = false);
+    Declaration* WalkDeclaration(const clang::Decl* D, bool CanBeDefinition = false,
+        bool WalkDeclarations = true);
     Declaration* WalkDeclarationDef(clang::Decl* D);
     Enumeration* WalkEnum(const clang::EnumDecl* ED);
 	Enumeration::Item* WalkEnumItem(clang::EnumConstantDecl* ECD);
@@ -110,8 +111,9 @@ private:
     VTableComponent WalkVTableComponent(const clang::VTableComponent& Component);
     PreprocessedEntity* WalkPreprocessedEntity(Declaration* Decl,
         clang::PreprocessedEntity* PPEntity);
-    AST::Expression* WalkExpression(clang::Expr* Expression);
+    AST::Expression* WalkExpression(const clang::Expr* Expression);
     std::string GetStringFromStatement(const clang::Stmt* Statement);
+    std::string GetFunctionBody(const clang::FunctionDecl* FD);
 
     // Clang helpers
     SourceLocationKind GetLocationKind(const clang::SourceLocation& Loc);
@@ -119,6 +121,9 @@ private:
     std::string GetDeclMangledName(const clang::Decl* D);
     std::string GetTypeName(const clang::Type* Type);
     bool CanCheckCodeGenInfo(clang::Sema & S, const clang::Type * Ty);
+    Parameter* WalkParameter(const clang::ParmVarDecl* PVD,
+        const clang::SourceLocation& ParamStartLoc);
+    void SetBody(const clang::FunctionDecl* FD, Function* F);
     void WalkFunction(const clang::FunctionDecl* FD, Function* F,
         bool IsDependent = false);
     void HandlePreprocessedEntities(Declaration* Decl);
@@ -138,13 +143,16 @@ private:
     void HandleComments(const clang::Decl* D, Declaration* Decl);
     void HandleDiagnostics(ParserResult* res);
 
-    int Index;
-    ASTContext* Lib;
-    CppParserOptions* Opts;
-    std::unique_ptr<clang::CompilerInstance> C;
+    int index;
+    CppSharp::CppParser::AST::ASTContext* lib;
+    CppParserOptions* opts;
+    std::unique_ptr<clang::CompilerInstance> c;
     clang::ASTContext* AST;
-    clang::TargetCXXABI::Kind TargetABI;
-    clang::CodeGen::CodeGenTypes* CodeGenTypes;
+    clang::TargetCXXABI::Kind targetABI;
+    clang::CodeGen::CodeGenTypes* codeGenTypes;
+    std::unordered_map<const clang::TemplateTypeParmDecl*, TypeTemplateParameter*> walkedTypeTemplateParameters;
+    std::unordered_map<const clang::TemplateTemplateParmDecl*, TemplateTemplateParameter*> walkedTemplateTemplateParameters;
+    std::unordered_map<const clang::NonTypeTemplateParmDecl*, NonTypeTemplateParameter*> walkedNonTypeTemplateParameters;
 
     ParserResultKind ReadSymbols(llvm::StringRef File,
                                  llvm::object::basic_symbol_iterator Begin,

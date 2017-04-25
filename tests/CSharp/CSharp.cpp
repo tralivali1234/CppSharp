@@ -1,4 +1,4 @@
-#include "CSharp.h"
+﻿#include "CSharp.h"
 
 Foo::Foo(const char* name)
 {
@@ -456,6 +456,10 @@ QRect::QRect(QPoint p, QSize s)
 {
 }
 
+DefaultZeroMappedToEnum::DefaultZeroMappedToEnum(int*)
+{
+}
+
 MethodsWithDefaultValues::QMargins::QMargins(int left, int top, int right, int bottom)
 {
 }
@@ -471,6 +475,10 @@ MethodsWithDefaultValues::MethodsWithDefaultValues(Foo foo)
 MethodsWithDefaultValues::MethodsWithDefaultValues(int a)
 {
     m_foo.A = a;
+}
+
+MethodsWithDefaultValues::MethodsWithDefaultValues(float a, Zero b)
+{
 }
 
 MethodsWithDefaultValues::MethodsWithDefaultValues(double d, QList<QColor> list)
@@ -551,6 +559,10 @@ void MethodsWithDefaultValues::defaultMappedToZeroEnum(QFlags<Flags> qFlags)
 }
 
 void MethodsWithDefaultValues::defaultMappedToEnumAssignedWithCtor(QFlags<Flags> qFlags)
+{
+}
+
+void MethodsWithDefaultValues::defaultZeroMappedToEnumAssignedWithCtor(DefaultZeroMappedToEnum defaultZeroMappedToEnum)
 {
 }
 
@@ -1201,25 +1213,27 @@ MissingObjectOnVirtualCallSecondaryBase::MissingObjectOnVirtualCallSecondaryBase
 {
 }
 
-void MissingObjectOnVirtualCallSecondaryBase::f()
+int MissingObjectOnVirtualCallSecondaryBase::f()
 {
+    return 5;
 }
 
 MissingObjectOnVirtualCall::MissingObjectOnVirtualCall()
 {
 }
 
-void MissingObjectOnVirtualCall::f()
+int MissingObjectOnVirtualCall::f()
 {
+    return 15;
 }
 
 HasMissingObjectOnVirtualCall::HasMissingObjectOnVirtualCall()
 {
 }
 
-void HasMissingObjectOnVirtualCall::makeMissingObjectOnVirtualCall()
+int HasMissingObjectOnVirtualCall::makeMissingObjectOnVirtualCall()
 {
-    stackOverflowOnVirtualCall->f();
+    return stackOverflowOnVirtualCall->f();
 }
 
 void HasMissingObjectOnVirtualCall::setMissingObjectOnVirtualCall(MissingObjectOnVirtualCall* value)
@@ -1261,4 +1275,78 @@ int ImplementsAbstractsFromPrimaryAndSecondary::abstractReturnsFieldInPrimaryBas
 int ImplementsAbstractsFromPrimaryAndSecondary::abstractReturnsFieldInSecondaryBase()
 {
     return field + 2;
+}
+
+HasBaseSetter::HasBaseSetter()
+{
+}
+
+HasBaseSetter::~HasBaseSetter()
+{
+}
+
+void HasBaseSetter::setBaseSetter(int value)
+{
+}
+
+HasGetterAndOverriddenSetter::HasGetterAndOverriddenSetter()
+{
+}
+
+HasGetterAndOverriddenSetter::~HasGetterAndOverriddenSetter()
+{
+}
+
+int HasGetterAndOverriddenSetter::baseSetter()
+{
+    return field;
+}
+
+void HasGetterAndOverriddenSetter::setBaseSetter(int value)
+{
+    field = value;
+}
+
+void hasArrayOfConstChar(const char* const arrayOfConstChar[])
+{
+}
+
+struct IncompleteStruct {};
+
+IncompleteStruct* createIncompleteStruct()
+{
+    return new IncompleteStruct();
+}
+
+DLL_API void useIncompleteStruct(IncompleteStruct * a)
+{
+    return;
+}
+
+struct DuplicateDeclaredStruct {
+    int i = 0;
+};
+
+DLL_API ForwardDeclaredStruct* createForwardDeclaredStruct(int i)
+{
+    auto ptr = new ForwardDeclaredStruct();
+    ptr->i = i;
+    return ptr;
+}
+
+DLL_API int useForwardDeclaredStruct(ForwardDeclaredStruct* s)
+{
+    return s->i;
+}
+
+DLL_API DuplicateDeclaredStruct* createDuplicateDeclaredStruct(int i)
+{
+    auto ptr = new DuplicateDeclaredStruct();
+    ptr->i = i;
+    return ptr;
+}
+
+DLL_API int useDuplicateDeclaredStruct(DuplicateDeclaredStruct* s)
+{
+    return s->i;
 }

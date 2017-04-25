@@ -21,6 +21,8 @@ namespace Math
     Complex Complex::operator+(Complex &other) {
         return Complex(re + other.re, im + other.im);
     }
+
+    void function();
 }
 
 // Tests Enum.ItemByName
@@ -34,6 +36,9 @@ public:
     TestTemplateClass(T v);
     T Identity(T x);
     T value;
+    class NestedInTemplate
+    {
+    };
 };
 
 // Tests function templates
@@ -116,6 +121,7 @@ class TestSpecializationArguments
 {
 public:
     TestSpecializationArguments() {}
+    typename TestTemplateClass<T>::NestedInTemplate n;
 };
 
 void instantiatesTemplate(TestSpecializationArguments<int> i, TestSpecializationArguments<float> f)
@@ -156,3 +162,13 @@ typedef ForwardedTemplate<int> i;
 typedef ForwardedTemplate<long> l;
 
 template class TestSpecializationArguments<const TestASTEnumItemByName>;
+
+constexpr void constExprNoExcept() noexcept;
+
+template <typename T1, typename T2>
+bool functionWithSpecInfo(const T1& t11, const T1& t12, const T2& t2);
+
+template<>
+bool functionWithSpecInfo(const float& t11, const float& t12, const float& t2);
+
+void functionWithSpecializationArg(const TestTemplateClass<int>);

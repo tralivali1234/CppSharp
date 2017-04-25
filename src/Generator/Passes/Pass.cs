@@ -12,7 +12,6 @@ namespace CppSharp.Passes
     {
         public BindingContext Context { get; set; }
 
-        public IDiagnostics Diagnostics { get { return Context.Diagnostics; } }
         public DriverOptions Options { get { return Context.Options; } }
         public ASTContext ASTContext { get { return Context.ASTContext; } }
         public TypeMapDatabase TypeMaps { get { return Context.TypeMaps; } }
@@ -27,7 +26,7 @@ namespace CppSharp.Passes
             return true;
         }
 
-        public virtual bool VisitTranslationUnit(TranslationUnit unit)
+        public override bool VisitTranslationUnit(TranslationUnit unit)
         {
             if (!unit.IsValid || unit.Ignore)
                 return false;

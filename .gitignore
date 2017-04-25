@@ -8,7 +8,6 @@ autom4te.cache
 missing
 *Makefile
 *Makefile.in
-*.dll
 *.exe
 bin/
 *.userprefs
@@ -44,6 +43,7 @@ src/generator/generator
 /build/gmake
 /build/headers
 /deps/llvm
+/deps/NUnit*
 /extra
 /site
 /wip

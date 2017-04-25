@@ -19,7 +19,8 @@ namespace CppSharp.AST
             }
 
             throw new NotSupportedException(
-                string.Format("VTable format for {0} is not supported", @class.Layout.ABI.ToString().Split('.').Last())
+                string.Format("VTable format for {0} is not supported",
+                @class.Layout.ABI.ToString().Split('.').Last())
             );
         }
 
@@ -64,7 +65,8 @@ namespace CppSharp.AST
                             where j >= 0
                             select j).First();
                 default:
-                    return @class.Layout.Layout.Components.FindIndex(m => m.Method == function) - ItaniumOffsetToTopAndRTTI;
+                    return @class.Layout.Layout.Components.FindIndex(
+                        m => m.Method == function) - ItaniumOffsetToTopAndRTTI;
             }
         }
 
@@ -73,9 +75,7 @@ namespace CppSharp.AST
             return entry.Method != null &&
                    (entry.Method.IsOperator ||
                     (!entry.Method.IsDeclared &&
-                     ((Class) entry.Method.Namespace).GetPropertyByConstituentMethod(entry.Method) == null) ||
-                     // virtuals defined in templates are not yet supported
-                     entry.Method.Namespace is ClassTemplateSpecialization);
+                     ((Class) entry.Method.Namespace).GetPropertyByConstituentMethod(entry.Method) == null));
         }
     }
 }

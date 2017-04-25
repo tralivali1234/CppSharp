@@ -10,7 +10,7 @@ dofile "LLVM.lua"
 solution "CppSharp"
 
   configurations { "Debug", "Release" }
-  platforms { "x32", "x64" }
+  platforms { target_architecture() }
 
   characterset "Unicode"
   symbols "On"
@@ -31,7 +31,8 @@ solution "CppSharp"
     include (srcdir .. "/CppParser")
     include (srcdir .. "/CppParser/Bindings")
     include (srcdir .. "/CppParser/ParserGen")
-    include (srcdir .. "/Parser")    
+    include (srcdir .. "/Parser")
+    include (srcdir .. "/CLI")
     include (srcdir .. "/Generator")
     include (srcdir .. "/Generator.Tests")
     include (srcdir .. "/Runtime")

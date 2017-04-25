@@ -1,5 +1,35 @@
 -- This module checks for the all the project dependencies.
 
+newoption {
+   trigger     = "arch",
+   description = "Choose a particular architecture / bitness",
+   allowed = {
+      { "x86",  "x86 32-bits" },
+      { "x64",  "x64 64-bits" },
+   }
+}
+
+explicit_target_architecture = _OPTIONS["arch"]
+
+function is_64_bits_mono_runtime()
+  result, errorcode = os.outputof("mono --version")
+  local arch = string.match(result, "Architecture:%s*([%w]+)")
+  return arch == "amd64"
+end
+
+function target_architecture()
+  -- Default to 32-bit on Windows and Mono architecture otherwise.
+  if explicit_target_architecture ~= nil then
+    return explicit_target_architecture
+  end
+  if os.is("windows") then return "x86" end
+  return is_64_bits_mono_runtime() and "x64" or "x86"
+end
+
+if not _OPTIONS["arch"] then
+  _OPTIONS["arch"] = target_architecture()
+end
+
 action = _ACTION or ""
 
 basedir = path.getdirectory(_PREMAKE_COMMAND)
@@ -75,12 +105,17 @@ function SetupManagedProject()
     configuration(c)
   end
 
-  if action == "vs2015" then
+  if action == "vs2017" then
 
-  configuration "vs2015"
-    framework "4.6"
-
-  end
+        configuration "vs2017"
+			framework "4.6"
+    
+    elseif action == "vs2015" then
+        
+        configuration "vs2015"
+			framework "4.6"
+    
+    end
 
   configuration "vs2013"
     framework "4.5"

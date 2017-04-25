@@ -7,8 +7,11 @@ project "CppSharp"
   clr "Unsafe"
 
   files { "**.cs" }
+  vpaths { ["*"] = "*" }
+  
   links
   {
     "System",
     "System.Core",
+    depsdir .. "/vs2017/Microsoft.VisualStudio.Setup.Configuration.Interop"
   }

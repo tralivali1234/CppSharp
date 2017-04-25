@@ -22,23 +22,31 @@ namespace CppSharp.Passes
             if (Options.IsCSharpGenerator)
             {
                 // C# cannot have protected members in static classes.
-                var @class = decl.Namespace as Class;
-                if (    decl.Access == AccessSpecifier.Protected && 
-                        decl.GenerationKind == GenerationKind.Generate &&
-                        @class != null && 
-                        @class.IsStatic)
-                {
-                    // By setting it to private it will appear
-                    // as an internal in the final C# wrapper.
-                    decl.Access = AccessSpecifier.Private;
-
-                    // We need to explicity set the generation else the
-                    // now private declaration will get filtered out later.
-                    decl.GenerationKind = GenerationKind.Generate;
-                }
+                if (IsProtectedClassMember(decl) && decl.IsGenerated)
+                    SetDeclarationAccessToPrivate(decl);
             }
 
             return true;
+        }
+
+        static bool IsProtectedClassMember(Declaration decl)
+        {
+            if (decl.Access != AccessSpecifier.Protected)
+                return false;
+            
+            var @class = decl.Namespace as Class;
+            return @class != null && @class.IsStatic;
+        }
+
+        static void SetDeclarationAccessToPrivate(Declaration decl)
+        {
+            // By setting it to private it will appear
+            // as an internal in the final C# wrapper.
+            decl.Access = AccessSpecifier.Private;
+
+            // We need to explicity set the generation else the
+            // now private declaration will get filtered out later.
+            decl.GenerationKind = GenerationKind.Generate;
         }
 
         static bool ReturnsClassInstance(Function function)
@@ -82,13 +90,16 @@ namespace CppSharp.Passes
             // If one exists, we assume it's a factory function and the class is
             // not meant to be static. It's a simple heuristic but it should be
             // good enough for the time being.
-            if (@class.Functions.Any(ReturnsClassInstance) ||
-                @class.Methods.Any(ReturnsClassInstance))
+            if (@class.Functions.Any(m => !m.IsOperator && ReturnsClassInstance(m)) ||
+                @class.Methods.Any(m => !m.IsOperator && ReturnsClassInstance(m)))
                 return false;
 
             // If the class is to be used as an opaque type, then it cannot be
             // bound as static.
             if (@class.IsOpaque)
+                return false;
+
+            if (@class.IsDependent)
                 return false;
 
             // TODO: We should take C++ friends into account here, they might allow

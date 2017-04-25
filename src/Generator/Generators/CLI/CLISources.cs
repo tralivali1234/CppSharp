@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -6,7 +6,6 @@ using System.Linq;
 using CppSharp.AST;
 using CppSharp.AST.Extensions;
 using CppSharp.Generators.CSharp;
-using CppSharp.Types;
 using Type = CppSharp.AST.Type;
 
 namespace CppSharp.Generators.CLI
@@ -19,13 +18,13 @@ namespace CppSharp.Generators.CLI
         public CLISources(BindingContext context, IEnumerable<TranslationUnit> units)
             : base(context, units)
         {
-            
         }
+
+        public override string FileExtension { get { return "cpp"; } }
 
         public override void Process()
         {
-            PushBlock(BlockKind.Header);
-            PopBlock();
+            GenerateFilePreamble(CommentKind.BCPL);
 
             var file = Path.GetFileNameWithoutExtension(TranslationUnit.FileName)
                 .Replace('\\', '/');
@@ -33,14 +32,14 @@ namespace CppSharp.Generators.CLI
             if (Context.Options.GenerateName != null)
                 file = Context.Options.GenerateName(TranslationUnit);
 
-            PushBlock(CLIBlockKind.Includes);
+            PushBlock(BlockKind.Includes);
             WriteLine("#include \"{0}.h\"", file);
             GenerateForwardReferenceHeaders();
 
             NewLine();
             PopBlock();
 
-            PushBlock(CLIBlockKind.Usings);
+            PushBlock(BlockKind.Usings);
             WriteLine("using namespace System;");
             WriteLine("using namespace System::Runtime::InteropServices;");
             foreach (var customUsingStatement in Options.DependentNameSpaces)
@@ -58,7 +57,7 @@ namespace CppSharp.Generators.CLI
 
         public void GenerateForwardReferenceHeaders()
         {
-            PushBlock(CLIBlockKind.IncludesForwardReferences);
+            PushBlock(BlockKind.IncludesForwardReferences);
 
             var typeReferenceCollector = new CLITypeReferenceCollector(Context.TypeMaps, Context.Options);
             typeReferenceCollector.Process(TranslationUnit, filterNamespaces: false);
@@ -83,7 +82,7 @@ namespace CppSharp.Generators.CLI
 
         private void GenerateDeclContext(DeclarationContext @namespace)
         {
-            PushBlock(CLIBlockKind.Namespace);
+            PushBlock(BlockKind.Namespace);
             foreach (var @class in @namespace.Classes)
             {
                 if (!@class.IsGenerated || @class.IsDependent)
@@ -126,7 +125,7 @@ namespace CppSharp.Generators.CLI
 
         public void GenerateClass(Class @class)
         {
-            PushBlock(CLIBlockKind.Class);
+            PushBlock(BlockKind.Class);
 
             GenerateDeclContext(@class);
 
@@ -138,7 +137,7 @@ namespace CppSharp.Generators.CLI
             {
                 var qualifiedIdentifier = QualifiedIdentifier(@class);
 
-                PushBlock(CLIBlockKind.Method);
+                PushBlock(BlockKind.Method);
                 WriteLine("System::IntPtr {0}::{1}::get()",
                     qualifiedIdentifier, Helpers.InstanceIdentifier);
                 WriteStartBraceIndent();
@@ -146,7 +145,7 @@ namespace CppSharp.Generators.CLI
                 WriteCloseBraceIndent();
                 PopBlock(NewLineKind.BeforeNextBlock);
 
-                PushBlock(CLIBlockKind.Method);
+                PushBlock(BlockKind.Method);
                 WriteLine("void {0}::{1}::set(System::IntPtr object)",
                     qualifiedIdentifier, Helpers.InstanceIdentifier);
                 WriteStartBraceIndent();
@@ -211,7 +210,7 @@ namespace CppSharp.Generators.CLI
 
             foreach (var method in @class.Methods.Where(m => @class == realOwner || !m.IsOperator))
             {
-                if (ASTUtils.CheckIgnoreMethod(method, Options))
+                if (ASTUtils.CheckIgnoreMethod(method, Options) || CLIHeaders.FunctionIgnored(method))
                     continue;
 
                 // C++/CLI does not allow special member funtions for value types.
@@ -238,13 +237,14 @@ namespace CppSharp.Generators.CLI
             }
 
             foreach (var property in @class.Properties.Where(
-                p => !ASTUtils.CheckIgnoreProperty(p) && !p.IsInRefTypeAndBackedByValueClassField()))
+                p => !ASTUtils.CheckIgnoreProperty(p) && !p.IsInRefTypeAndBackedByValueClassField() &&
+                        !CLIHeaders.TypeIgnored(p.Type)))
                 GenerateProperty(property, realOwner);
         }
 
         private void GenerateClassDestructor(Class @class)
         {
-            PushBlock(CLIBlockKind.Destructor);
+            PushBlock(BlockKind.Destructor);
 
             WriteLine("{0}::~{1}()", QualifiedIdentifier(@class), @class.Name);
             WriteStartBraceIndent();
@@ -270,7 +270,7 @@ namespace CppSharp.Generators.CLI
 
         private void GenerateClassFinalizer(Class @class)
         {
-            PushBlock(CLIBlockKind.Finalizer);
+            PushBlock(BlockKind.Finalizer);
 
             WriteLine("{0}::!{1}()", QualifiedIdentifier(@class), @class.Name);
             WriteStartBraceIndent();
@@ -288,7 +288,7 @@ namespace CppSharp.Generators.CLI
             var printer = TypePrinter;
             var oldCtx = printer.TypePrinterContext;
 
-            PushBlock(CLIBlockKind.Template);
+            PushBlock(BlockKind.Template);
 
             var function = template.TemplatedFunction;
 
@@ -329,7 +329,7 @@ namespace CppSharp.Generators.CLI
 
         private void GenerateProperty(Property property, Class realOwner)
         {
-            PushBlock(CLIBlockKind.Property);
+            PushBlock(BlockKind.Property);
 
             if (property.Field != null)
             {
@@ -687,7 +687,8 @@ namespace CppSharp.Generators.CLI
             }
 
             int paramIndex = 0;
-            foreach (var property in @class.Properties.Where( p => !ASTUtils.CheckIgnoreProperty(p)))
+            foreach (var property in @class.Properties.Where( 
+                p => !ASTUtils.CheckIgnoreProperty(p) && !CLIHeaders.TypeIgnored(p.Type)))
             {
                 if (property.Field == null)
                     continue;
@@ -743,7 +744,9 @@ namespace CppSharp.Generators.CLI
 
         public void GenerateMethod(Method method, Class @class)
         {
-            PushBlock(CLIBlockKind.Method, method);
+            if (CLIHeaders.FunctionIgnored(method))
+                return;
+            PushBlock(BlockKind.Method, method);
 
             if (method.IsConstructor || method.IsDestructor ||
                 method.OperatorKind == CXXOperatorKind.Conversion ||
@@ -762,7 +765,7 @@ namespace CppSharp.Generators.CLI
 
             WriteStartBraceIndent();
 
-            PushBlock(CLIBlockKind.MethodBody, method);
+            PushBlock(BlockKind.MethodBody, method);
 
             if (method.IsConstructor && @class.IsRefType)
                 WriteLine("{0} = true;", Helpers.OwnsNativeInstanceIdentifier);
@@ -895,7 +898,7 @@ namespace CppSharp.Generators.CLI
 
         public void GenerateFunction(Function function, DeclarationContext @namespace)
         {
-            if (!function.IsGenerated)
+            if (!function.IsGenerated || CLIHeaders.FunctionIgnored(function))
                 return;
 
             GenerateDeclarationCommon(function);
@@ -1051,10 +1054,10 @@ namespace CppSharp.Generators.CLI
 
             if (needsReturn)
             {
-                var retTypeName = retType.Visit(TypePrinter);
+                var retTypeName = retType.Visit(TypePrinter).ToString();
                 var isIntPtr = retTypeName.Contains("IntPtr");
 
-                if (retType.Type.IsPointer() && (isIntPtr || retTypeName.EndsWith("^")))
+                if (retType.Type.IsPointer() && (isIntPtr || retTypeName.EndsWith("^", StringComparison.Ordinal)))
                 {
                     WriteLine("if ({0} == nullptr) return {1};",
                         returnIdentifier,
@@ -1228,7 +1231,5 @@ namespace CppSharp.Generators.CLI
                 }).ToList();
             Write(string.Join(", ", names));
         }
-
-        public override string FileExtension { get { return "cpp"; } }
     }
 }
